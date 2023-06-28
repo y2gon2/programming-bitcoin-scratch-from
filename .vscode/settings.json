@@ -1,0 +1,5 @@
+{
+    "rust-analyzer.linkedProjects": [
+        "./ch4_serialization/Cargo.toml"
+    ]
+}
