@@ -1,5 +1,5 @@
 {
     "rust-analyzer.linkedProjects": [
-        "./ch4_serialization/Cargo.toml"
+        "./basic_bitcoin/Cargo.toml"
     ]
 }
