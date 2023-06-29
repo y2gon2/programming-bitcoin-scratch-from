@@ -10,9 +10,9 @@
 
 use std::error::Error;
 use std::fmt::{Display};
-use std::ops::{Add, Sub, Mul, Rem, Div};
+use std::ops::{Add, Sub, Mul};
 
-use num::{BigInt, BigUint, Zero, One, FromPrimitive};
+use num::{BigUint, Zero, One, FromPrimitive};
 
 #[derive(Debug, Clone)]
 pub struct FieldElement {
@@ -83,6 +83,12 @@ impl PartialEq for FieldElement {
     }
 }
 
+impl<'a> PartialEq<&'a FieldElement> for FieldElement {
+    fn eq(&self, other: &&'a Self) -> bool {
+        return self.num == other.num  && self.prime == other.prime;
+    }
+}
+
 impl Eq for FieldElement {}
 
 impl Display for FieldElement {
@@ -92,46 +98,86 @@ impl Display for FieldElement {
 }
 
 impl Add for FieldElement {
-    type Output = FieldElement;
+    type Output = Result<FieldElement, Box<dyn Error>>;
 
     fn add(self, other: Self) -> Self::Output {
         if self.prime != other.prime {
-            panic!("Cannt add two numbers in different Field.(Prime value is not matched)");
+            return Err("Cannt add two numbers in different Field.".into());
         }
         let new_num = (self.num + other.num) % self.prime;
-        FieldElement::new(new_num).unwrap()
+        Ok(FieldElement::new(new_num)?)
     }
 }
 
-impl Sub for FieldElement {
-    type Output = FieldElement;
+impl<'a> Add<&'a FieldElement> for &'a FieldElement {
+    type Output = Result<FieldElement, Box<dyn Error>>;
 
-    fn sub(self, other: Self) -> Self::Output {
-        if &self.prime != &other.prime {
-            panic!("Cannt add two numbers in different Field.(Prime value is not matched)");
+    fn add(self, rhs: &'a FieldElement) -> Self::Output {
+        if self.prime != rhs.prime {
+            return Err("Cannt add two numbers in different Field.".into());
+        }
+        let new_num = (&self.num + &rhs.num) % &self.prime;
+        Ok(FieldElement::new(new_num)?)
+    }
+} 
+
+impl Sub for FieldElement {
+    type Output = Result<FieldElement, Box<dyn Error>>;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        if &self.prime != &rhs.prime {
+            return Err("Cannt add two numbers in different Field.".into());
         }
 
-        let mut new_num = BigUint::from(self.get_number().clone());
-        if &self.num >=  &other.num {
-            new_num = (self.get_number() - other.get_number()) % self.get_prime();
+        let mut new_num = BigUint::zero();
+        if &self.num >=  &rhs.num {
+            new_num = (self.get_number() - rhs.get_number()) % self.get_prime();
         } else {
-            let ne_diff = (other.get_number() - self.get_number()) % self.get_number();
-            if ne_diff == BigUint::zero() {
-                new_num = BigUint::zero();
-            } else {
-                new_num = self.get_prime() - ne_diff; 
+            let ne_diff = (rhs.get_number() - self.get_number()) % self.get_number();
+            if ne_diff != BigUint::zero() {
+                new_num = self.get_prime() - ne_diff;
             }
         }
-        FieldElement::new(new_num).unwrap()
+        Ok(FieldElement::new(new_num)?)
+    }
+}
+
+impl<'a> Sub<&'a FieldElement> for &'a FieldElement {
+    type Output = Result<FieldElement, Box<dyn Error>>;
+
+    fn sub(self, rhs: &'a FieldElement) -> Self::Output {
+        if &self.prime != &rhs.prime {
+            return Err("Cannt add two numbers in different Field.".into());
+        }
+        
+        let mut new_num = BigUint::zero();
+        if &self.num >= &rhs.num {
+            new_num = (self.get_number() - rhs.get_number()) % self.get_prime();
+        } else {
+            let ne_diff = (rhs.get_number() - self.get_number()) % self.get_prime();
+            if ne_diff != BigUint::zero() {
+                new_num = self.get_prime() - ne_diff;
+            }
+        }
+        Ok(FieldElement::new(new_num)?)
     }
 }
 
 impl Mul for FieldElement {
-    type Output = Self;
+    type Output = Result<FieldElement, Box<dyn Error>>;
 
     fn mul(self, rhs: Self) -> Self::Output {
         let new_num = self.get_number() * rhs.get_number();
-        FieldElement::new(new_num).unwrap()
+        Ok(FieldElement::new(new_num)?)
+    }
+}
+
+impl<'a> Mul<&'a FieldElement> for &'a FieldElement {
+    type Output = Result<FieldElement, Box<dyn Error>>;
+
+    fn mul(self, rhs: &'a FieldElement) -> Self::Output {
+        let new_num = self.get_number() * rhs.get_number();
+        Ok(FieldElement::new(new_num)?)
     }
 }
 
@@ -180,10 +226,12 @@ mod field_element_tests {
 
         assert!(a == b);
         assert!(a != c);
+        assert!(&a == &b);
+        assert!(&a != &c);
     }
 
     #[test]
-    fn field_element_add_sub() {
+    fn field_element_add_sub() -> Result<(), Box<dyn Error>>{
         let a = FieldElement::new(
             BigUint::from_str_radix(BIG1, 16).unwrap()
         ).unwrap();
@@ -196,12 +244,21 @@ mod field_element_tests {
             BigUint::from_str_radix(B1PLUS1, 16).unwrap()
         ).unwrap();
 
-        assert!(a.clone() + b.clone() == c.clone());
-        assert!(a.clone() - c.clone() == FieldElement::new(b.clone().get_prime() - b.clone().get_number()).unwrap());
+        assert!((a.clone() + b.clone())? == c.clone());
+        assert!((a.clone() - c.clone())? == (FieldElement::new(b.clone().get_prime() - b.clone().get_number())?));
+        
+        let ref_a = &a;
+        let ref_b = &b;
+        let ref_c = &c;
+        let added = (ref_a + ref_b)?;
+        let subtract = (ref_a - ref_c)?;
+        assert!(added == c);
+        assert!(subtract == (FieldElement::new(b.clone().get_prime() - b.clone().get_number()))?);
+        Ok(())
     }
 
     #[test]
-    fn field_element_mul_div() {
+    fn field_element_mul_div() -> Result<(), Box<dyn Error>>{
         let a = FieldElement::new(
             BigUint::from_str_radix(BIG1, 16).unwrap()
         ).unwrap();
@@ -210,12 +267,14 @@ mod field_element_tests {
             BigUint::from_str_radix("1", 16).unwrap()
         ).unwrap();
 
-        assert!(a.clone() * c.clone() == a.clone());
+        assert!((a.clone() * c.clone())? == a.clone());
+        assert!(&(&a * &c)? == &a );
+        Ok(())
     }
 
     #[test]
     fn pow_test1() {
-        let mut a = FieldElement::new(
+        let a = FieldElement::new(
             BigUint::from_str_radix(BIG1, 16).unwrap()
         ).unwrap();
 
@@ -227,7 +286,7 @@ mod field_element_tests {
 
     #[test]
     fn pow_test2() {
-        let mut a2 = FieldElement::new(
+        let a2 = FieldElement::new(
             BigUint::from_i8(2).unwrap()
         ).unwrap();
 
@@ -237,6 +296,23 @@ mod field_element_tests {
 
         a2.to_the_power_of(BigUint::from_i8(3).unwrap());
         assert_eq!(a2, a8);
+    }
+
+    #[test]
+    fn xxx() {
+        #[derive(Debug)]
+        struct MyStruct {
+            value: i32,
+        }
+
+        let a = MyStruct { value: 5 };
+        let b = MyStruct { value: 10 };
+        let ref_a = &a;
+        let ref_b = &b;
+        let result = ref_a.value + ref_b.value;
+        println!("Result: {}", result);
+        println!("a: {:?}", a); // 이후에도 여전히 a와 b를 사용할 수 있음
+        println!("b: {:?}", b);
     }
 
 }
