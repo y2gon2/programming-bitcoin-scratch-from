@@ -18,6 +18,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "big_unit"
+version = "0.1.0"
+dependencies = [
+ "num",
+ "rand",
+ "secp256k1",
+]
+
+[[package]]
 name = "cc"
 version = "1.0.79"
 source = "registry+https://github.com/rust-lang/crates.io-index"

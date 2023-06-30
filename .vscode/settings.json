@@ -1,10 +1,8 @@
 {
     "rust-analyzer.linkedProjects": [
+        "Cargo.toml",
         "./basic_bitcoin/Cargo.toml",
-        "./basic_bitcoin/Cargo.toml",
-        "./basic_bitcoin/Cargo.toml",
-        "./basic_bitcoin/Cargo.toml",
-        "./basic_bitcoin/Cargo.toml"
+        "./big_uint/Cargo.toml",
     ],
     "rust-analyzer.showUnlinkedFileNotification": false
 }
