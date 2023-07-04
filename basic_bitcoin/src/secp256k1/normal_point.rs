@@ -1,22 +1,21 @@
 //! Elliptic Curve Cryptography
 //! 타원 곡선 위 유한체를 적용한 타원곡선 암호 구현
-//! 
 
 
 use std::error::Error;
-use std::ops::{Add, Sub, Mul, Rem, Div};
+use std::ops::{Add};
 use std::fmt::Display;
 
 
 #[derive(Clone, Debug)]
-struct Point {
+struct NormalPoint {
     a: i32,
     b: i32,
     x: Option<i32>,
     y: Option<i32>,
 }
 
-impl Point {
+impl NormalPoint {
     fn new(x: Option<i32>, y: Option<i32>, a: i32, b: i32) 
         -> Result<Self, Box<dyn Error>> {
             let err_msg = "x, y is not on the curve.";
@@ -36,7 +35,7 @@ impl Point {
     }
 }
 
-impl PartialEq for Point {
+impl PartialEq for NormalPoint {
     fn eq(&self, other: &Self) -> bool {
         if self.a == other.a && self.b == other.b && self.x == other.x && self.y == other.y {
             return true;
@@ -46,10 +45,10 @@ impl PartialEq for Point {
     }
 }
 
-impl Eq for Point {}
+impl Eq for NormalPoint {}
 
-impl<'a> PartialEq<&'a Point> for Point {
-    fn eq(&self, other: &&'a Point) -> bool {
+impl<'a> PartialEq<&'a NormalPoint> for NormalPoint {
+    fn eq(&self, other: &&'a NormalPoint) -> bool {
         if self.a == other.a && self.b == other.b && self.x == other.x && self.y == other.y {
             return true;
         } else {
@@ -58,7 +57,7 @@ impl<'a> PartialEq<&'a Point> for Point {
     }
 }
 
-impl Display for Point {
+impl Display for NormalPoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -68,8 +67,8 @@ impl Display for Point {
     }
 }
 
-impl Add for Point {
-    type Output = Result<Point, Box<dyn Error>>;
+impl Add for NormalPoint {
+    type Output = Result<NormalPoint, Box<dyn Error>>;
 
     fn add(self, rhs: Self) -> Self::Output {
         if &self.a != &rhs.a || &self.b != &rhs.b {
@@ -81,24 +80,24 @@ impl Add for Point {
         } else {
             if let (Some(s_x), Some(s_y), Some(r_x), Some(r_y)) = (&self.x, &self.y, &rhs.x, &rhs.y) {
                 if s_x == r_x && s_y != r_y {
-                    return Point::new(None, None, self.a, self.b);
+                    return NormalPoint::new(None, None, self.a, self.b);
                 }
                 if s_x != r_x {
                     let s = (r_y - s_y) / (r_x - s_x);
                     let x = s.pow(2) - s_x - r_x;
                     let y = s * (s_x - x) - s_y;
                     
-                    return Point::new(Some(x), Some(y), self.a, self.b);
+                    return NormalPoint::new(Some(x), Some(y), self.a, self.b);
                 }
                 if self == rhs && s_y == &(0 * s_x) {
-                    return Point::new(None, None, self.a, self.b);
+                    return NormalPoint::new(None, None, self.a, self.b);
                 }
                 if self == rhs {
                     let s = (3 * s_x.pow(2) + self.a) / (2 + s_y);
                     let x = s.pow(2) - 2 * s_x;
                     let y = s * (s_x -  x) - s_y;
     
-                    return Point::new(Some(x), Some(y), self.a, self.b);
+                    return NormalPoint::new(Some(x), Some(y), self.a, self.b);
                 }
             };
             return Err("Out of case".into());
@@ -112,10 +111,10 @@ mod point_test {
 
     #[test]
     fn new_test() -> Result<(), Box<dyn Error>>{
-        let p1 = Point::new(Some(-1), Some(-1), 5, 7)?;
-        let p1_eq = Point::new(Some(-1), Some(-1), 5, 7)?;
-        let p2 = Point::new(Some(-1), Some(1), 5, 7)?;
-        let inf =  Point::new(None, None, 5, 7)?;
+        let p1 = NormalPoint::new(Some(-1), Some(-1), 5, 7)?;
+        let p1_eq = NormalPoint::new(Some(-1), Some(-1), 5, 7)?;
+        let p2 = NormalPoint::new(Some(-1), Some(1), 5, 7)?;
+        let inf =  NormalPoint::new(None, None, 5, 7)?;
         
         assert!(p1 == p1_eq);
         assert!(p1 != p2);

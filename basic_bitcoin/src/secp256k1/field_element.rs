@@ -203,8 +203,22 @@ mod field_element_tests {
     }
 
     #[test]
-    fn field_element_add_sub() {
-   
+    fn ch3() {
+        let prime = 223i64;
+        let a = FieldElement::new(0, prime);
+        let b = FieldElement::new(7, prime);
+        let x1 = FieldElement::new(192, prime);
+        let y1 = FieldElement::new(105, prime);
+        let x2 = FieldElement::new(17, prime);
+        let y2 = FieldElement::new(56, prime);
+
+        let left1 = &y1.pow(2);
+        let right1 =  &(&(&x1.pow(3) + &(&a * &x1)) + &b);
+        assert!(left1 == right1);
+
+        let left2 = &y2.pow(2);
+        let right2 = &(&(&x2.pow(3) + &(&a * &x2)) + &b);
+        assert!(left2 == right2);
     }
 
     #[test]

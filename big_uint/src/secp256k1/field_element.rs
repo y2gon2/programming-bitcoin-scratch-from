@@ -10,12 +10,12 @@
 //! 
 //! Holding Point 
 //! 유한체 FieldElement 나눗셈을 구현하기 위해서 prime 값을 거듭제곱 지수로 사용해야하는데
-//! 현재 expoenent 로 BigUint 적용이 어려워서 작업 중단
+//! 현재 expoenent 로 BigUint 적용이 어려움  -> 임시 해당 값을 u32 로 변환하여  Div 구현
 
 
 use std::error::Error;
 use std::fmt::{Display};
-use std::ops::{Add, Sub, Mul};
+use std::ops::{Add, Sub, Mul, Div, Rem};
 
 use num::{BigUint, Zero, One, FromPrimitive};
 
@@ -186,17 +186,46 @@ impl<'a> Mul<&'a FieldElement> for &'a FieldElement {
     }
 }
 
-// impl Div for FieldElement {
-//     type Output = Result<FieldElement, Box<dyn Error>>;
+impl Div for FieldElement {
+    type Output = Result<FieldElement, Box<dyn Error>>;
 
-//     fn div(self, rhs: Self) -> Self::Output {
-//         if &self.get_prime() != &rhs.get_prime() {
-//             return Err("Cannot divide two numbers in different Fields.".into());
-//         }
+    fn div(self, rhs: Self) -> Self::Output {
+        if &self.get_prime() != &rhs.get_prime() {
+            return Err("Cannot divide two numbers in different Fields.".into());
+        }
 
-//         let new_num = &self.num * rhs.get_number().pow() 
-//     }
-// }
+        let prime_u32_vec = self.get_prime().iter_u32_digits().collect::<Vec<u32>>();
+        let new_num = 
+            &self.num * rhs.get_number().pow(prime_u32_vec[0] - 2) % self.get_prime();
+        
+        return FieldElement::new(new_num);
+    }
+}
+
+// source : https://github.com/garyray-k/programming_bitcoin_in_rust/blob/master/src/secp256k1/field_element.rs
+// 에러는 없는데 계산시간이 너무 오래걸리는 거 같음... ;; 
+// 실제로 사용 가능할지 모르겠음..
+impl<'a> Div<&'a FieldElement> for &'a FieldElement {
+    type Output = Result<FieldElement, Box<dyn Error>>;
+
+    fn div(self, rhs: &'a FieldElement) -> Self::Output {
+        if &self.get_prime() != &rhs.get_prime() {
+            return Err("Cannot divide two numbers in different Fields.".into());
+        }
+
+        let prime_u32_vec = self.get_prime().iter_u32_digits().collect::<Vec<u32>>();
+        let new_num = 
+            &self.num * rhs.num.modpow(
+                &(self.get_prime().clone() - BigUint::from_u32(2u32).unwrap()), 
+                &self.prime,
+            );
+        let answer = new_num.rem(self.get_prime());
+
+        return FieldElement::new(answer);
+    }
+}
+
+
 
 
 #[cfg(test)]
@@ -303,8 +332,24 @@ mod field_element_tests {
             BigUint::from_i8(8).unwrap()
         ).unwrap();
 
-        a2.to_the_power_of(BigUint::from_i8(3).unwrap());
-        assert_eq!(a2, a8);
+        let a2_pow = a2.to_the_power_of(BigUint::from_i8(3).unwrap());
+
+        assert_eq!(a2_pow, a8);
+    }
+
+
+    // 실제로 나눗셈이 되는지 모르겠음..
+    // 오류가 발생하지는 않는데 계산시간이 너무 오래 걸리는듯...
+    #[test]
+    fn div_rem_test() -> Result<(), Box<dyn Error>>{
+        let a6 = FieldElement::new(BigUint::from_i8(6).unwrap())?;
+        let a5 = FieldElement::new(BigUint::from_i8(5).unwrap())?;
+        let a3 = FieldElement::new(BigUint::from_i8(3).unwrap())?;
+        let a2 = FieldElement::new(BigUint::from_i8(2).unwrap())?;
+
+        assert!((a6.clone() / a3.clone())? == a2.clone());
+
+        Ok(())
     }
 
     #[test]

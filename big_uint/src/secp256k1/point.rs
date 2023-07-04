@@ -8,20 +8,22 @@
 
 
 use std::error::Error;
-// use std::ops::{Add, Sub, Mul};
+use std::ops::{Add};
 use std::fmt::Display;
 use num::{BigUint, FromPrimitive};
 use crate::secp256k1::field_element::FieldElement;
 
+const N: &str = "0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141";
+
 #[derive(Clone, Debug)]
-struct Secp256k1Point {
+struct Point {
     a: FieldElement,
     b: FieldElement,
     x: Option<FieldElement>,
     y: Option<FieldElement>,
 }
 
-impl Secp256k1Point {
+impl Point {
     #[allow(dead_code)]
     fn new(a: FieldElement, b: FieldElement, x: Option<FieldElement>, y: Option<FieldElement>) 
         -> Result<Self, Box<dyn Error>> {
@@ -42,7 +44,7 @@ impl Secp256k1Point {
     }
 }
 
-impl PartialEq for Secp256k1Point {
+impl PartialEq for Point {
     fn eq(&self, other: &Self) -> bool {
         if self.a == other.a && self.b == other.b && self.x == other.x && self.y == other.y {
             return true;
@@ -52,8 +54,8 @@ impl PartialEq for Secp256k1Point {
     }
 }
 
-impl<'a> PartialEq<&'a Secp256k1Point> for Secp256k1Point {
-    fn eq(&self, other: &&'a Secp256k1Point) -> bool {
+impl<'a> PartialEq<&'a Point> for Point {
+    fn eq(&self, other: &&'a Point) -> bool {
         if self.a == other.a && self.b == other.b && self.x == other.x && self.y == other.y {
             return true;
         } else {
@@ -62,7 +64,7 @@ impl<'a> PartialEq<&'a Secp256k1Point> for Secp256k1Point {
     }
 }
 
-impl Display for Secp256k1Point {
+impl Display for Point {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -72,32 +74,48 @@ impl Display for Secp256k1Point {
     }
 }
 
-// impl Add for Secp256k1Point {
-//     type Output = Result<Secp256k1Point, Box<dyn Error>>;
+// FieldElement 나누기 연산에 대한 trait 선언에 에러는 없으나 expoent 에 너무 큰수가 들어가서
+// 실제로 연산 시 너무 오래걸려서 제대로 실행되는지 확인 불가. 
+// 따라서 우선 해당 코드가 작동한다는 가정하에 이후 code 내용 작성 
+impl Add for Point {
+    type Output = Result<Point, Box<dyn Error>>;
 
-//     fn add(self, rhs: Self) -> Self::Output {
-//         let msg = "This is not on the same curve.";
-//         if (&self.a != &rhs.a) || (&self.b != &rhs.b) {
-//             return Err(msg.into());
-//         }
-//         if *&self.x == None {
-//             return Ok(rhs);
-//         }
-
-//         if *&rhs.x == None {
-//             return Ok(self);
-//         }
-
-//         if &self.x == &rhs.x && &self.y != &rhs.y {
-//             return Secp256k1Point::new(*&self.a, *&self.b, None, None);
-//         }
-
-//         if &self.x != &rhs.x {
-//             let s = (&rhs.y - &self.y)? /(&rhs.x - &self.x)?
-//         }
-
-//     }
-// }
+    fn add(self, rhs: Self) -> Self::Output {
+        if &self.a != &rhs.a || &self.b != &rhs.b {
+            panic!("They are not on the same curve.")
+        } else if self.x.is_none() || self.y.is_none() {
+            return Ok(rhs.clone());
+        } else if rhs.x.is_none() || rhs.y.is_none() {
+            return Ok(self.clone());
+        } else {
+            if let (Some(s_x), Some(s_y), Some(r_x), Some(r_y)) = (&self.x, &self.y, &rhs.x, &rhs.y) {
+                if s_x == r_x && s_y != r_y {
+                    return Point::new(self.a, self.b, None, None);
+                }
+                if s_x != r_x {
+                    let s = ((r_y - s_y)? / (r_x - s_x)?)?;  //  나누셈이 제대로 작동하는지 알수 없음..;;
+                    let x = (&(&s.to_the_power_of(BigUint::from_u8(2).unwrap()) - s_x)? - r_x)?;
+                    let y = (&(s * (s_x - &x)?)? - s_y)?;
+                    
+                    return Point::new(self.a, self.b, Some(x), Some(y));
+                }
+                if self == rhs && s_y == &(&FieldElement::new(BigUint::from_u8(0).unwrap())? * s_x)? {
+                    return Point::new(self.a, self.b, None, None);
+                }
+                if self == rhs {
+                    let s = 
+                        ((&(&FieldElement::new(BigUint::from_u8(3).unwrap())? * &(s_x.to_the_power_of(BigUint::from_u8(2).unwrap()))).unwrap() + &self.a)? 
+                        / (&FieldElement::new(BigUint::from_u8(2).unwrap())? + s_y).unwrap())?;
+                    let x = (s.to_the_power_of(BigUint::from_u8(2).unwrap()) - (&FieldElement::new(BigUint::from_u8(2).unwrap())? * s_x)?)?;
+                    let y = (&(s * (s_x -  &x)?)? - s_y)?;
+    
+                    return Point::new(self.a, self.b, Some(x), Some(y));
+                }
+            };
+            return Err("Out of case".into());
+        } 
+    }
+}
 
 #[cfg(test)]
 mod secp256k1point_test {
@@ -105,7 +123,7 @@ mod secp256k1point_test {
     use num::BigUint;
 
     type FE = FieldElement;
-    type PNT = Secp256k1Point;
+    type PNT = Point;
 
     // const BIG1: &str = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
     // const B1PLUS1: &str = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81799";
