@@ -13,8 +13,6 @@ use std::fmt::Display;
 use num::{BigUint, FromPrimitive};
 use crate::secp256k1::field_element::FieldElement;
 
-const N: &str = "0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141";
-
 #[derive(Clone, Debug)]
 struct Point {
     a: FieldElement,

@@ -213,6 +213,7 @@ impl<'a> Div<&'a FieldElement> for &'a FieldElement {
             return Err("Cannot divide two numbers in different Fields.".into());
         }
 
+        #[allow(unused_variables)]
         let prime_u32_vec = self.get_prime().iter_u32_digits().collect::<Vec<u32>>();
         let new_num = 
             &self.num * rhs.num.modpow(
@@ -343,7 +344,7 @@ mod field_element_tests {
     #[test]
     fn div_rem_test() -> Result<(), Box<dyn Error>>{
         let a6 = FieldElement::new(BigUint::from_i8(6).unwrap())?;
-        let a5 = FieldElement::new(BigUint::from_i8(5).unwrap())?;
+        
         let a3 = FieldElement::new(BigUint::from_i8(3).unwrap())?;
         let a2 = FieldElement::new(BigUint::from_i8(2).unwrap())?;
 
