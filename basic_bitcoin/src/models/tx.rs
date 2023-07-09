@@ -3,8 +3,16 @@ use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
 use std::io::{stdin, stdout, Read, Write};
+use serde::ser::{Serialize, Serializer, SerializeStruct};
+use sha2::{Sha256, Digest};
+use hex;
+use bincode;
 
 use crate::models::helper::*;
+
+//---------------------
+//         Tx
+//---------------------
 
 type version = u32;
 type locktime = u32;
@@ -40,10 +48,20 @@ impl Tx {
         false
     }
     // transaction 자체를 hashing 함. 
-    pub fn id(&self) -> u64 {
-        let mut s = DefaultHasher::new();
-        self.hash(&mut s);
-        s.finish() 
+    pub fn id(&self) -> Result<String, Box<dyn Error>> {
+        let id = self.hash()?;
+        Ok(hex::encode(id))
+    }
+
+    // 
+    fn hash(&self) -> Result<Vec<u8>, Box<dyn Error>> {
+        let mut tx_serde = self.serialize()?;
+        tx_serde.reverse();
+        
+        let mut hasher = Sha256::new();
+        hasher.update(&tx_serde);
+        
+        Ok(hasher.finalize().to_vec())
     }
 
     // version - serialized bytes [u8; 4] array 를 입력받으면 
@@ -88,6 +106,43 @@ impl Tx {
             testnet: false,
         })
     }
+
+    fn serialize(&self) -> Result<Vec<u8>, Box<dyn Error>> {
+        let mut result = Vec::<u8>::new();
+
+        let mut version_serde = u32_to_little_endian(self.version, 4)?;
+        result.append(&mut version_serde);
+
+        let mut tx_ins_serde = Vec::<u8>::new();
+
+        if let Some(internal_tx_ins) = self.tx_ins {
+            let mut num_of_input = encode_varint(internal_tx_ins.len() as u32)?;
+            tx_ins_serde.append(&mut num_of_input);
+
+            for tx_in in internal_tx_ins.iter() {
+                tx_ins_serde.append(&mut tx_in.serialize()?);
+            }      
+        };
+        result.append(&mut tx_ins_serde);
+
+        let mut tx_outs_serde = Vec::<u8>::new();
+
+        if let Some(internal_tx_outs) = self.tx_outs {
+            let mut num_of_output = encode_varint(internal_tx_outs.len() as u32)?;
+            tx_outs_serde.append(&mut num_of_output);
+
+            for tx_out in internal_tx_outs.iter() {
+                tx_outs_serde.append(&mut tx_out.serialize()?);  // to do
+            }
+        };
+        result.append(&mut tx_outs_serde);
+
+        if let Some(internal_locktime) = self.locktime {
+            result.append(&mut u32_to_little_endian(internal_locktime, 4)?);            
+        };        
+
+        Ok(result)
+    }
  }
 
 impl Display for Tx {
@@ -111,7 +166,7 @@ impl Display for Tx {
         write!(
             f,
             "tx: {}\nversion: {}\ntx_ins:\n{}tx_outs:\n{}locktime: {}",
-            self.id(), 
+            self.id().unwrap(), 
             self.version,
             tx_ins_string,
             tx_outs_string,
@@ -119,6 +174,11 @@ impl Display for Tx {
         )
     }
 }
+
+
+//---------------------
+//       TxIn
+//---------------------
 
 type PrevTx = [u8; 32];
 type PrevIndex = u32;
@@ -202,6 +262,21 @@ impl TxIn {
             sequence,
         })
     }
+
+    fn serialize(&self) -> Result<Vec<u8>, Box<dyn Error>> {
+        let mut result: Vec<u8> = self.prev_tx.to_vec();
+        result.reverse();
+
+        let mut prev_index_ser = u32_to_little_endian(self.prev_index, 4)?;
+        // let mut script_sig_ser = self.script_sig.serialize();
+        let mut sequence_ser = u32_to_little_endian(self.sequence, 4)?;
+
+        result.append(&mut prev_index_ser);
+        // result.append(&mut script_sig_ser);
+        result.append(&mut sequence_ser);
+
+        Ok(result)
+    }
 }
 
 impl Display for TxIn {
@@ -210,14 +285,77 @@ impl Display for TxIn {
 
         write!(
             f,
-            "{:02X?}: {}",
-            self.prev_tx, 
+            "{}: {}",
+            hex::encode(self.prev_tx), 
             self.prev_index,
         )
     }
 }
 
+//---------------------
+//       TxOut
+//---------------------
 
+type Amount = u64;
+type ScriptPubkey = Vec<u8>;
+
+#[derive(Hash, Debug, Clone)]
+pub struct TxOut {
+    // Bitcoin 금액
+    // 단위: Satoshi
+    // 1 Bitcoin == 100_000_000 Satoshi
+    amount: Amount,
+
+    // 잠금 script
+    // <-> 해제 script (script_sig) 
+    // scirpt_sig 와 동일한 smart contract script 로 쓰임 (?)
+    // varint 처럼 가변길이 필드로 시작
+    script_pubkey: ScriptPubkey,
+}
+
+impl TxOut {
+    pub fn new(amount: Amount, script_pubkey: ScriptPubkey) -> Self {
+        Self {
+            amount,
+            script_pubkey,
+        }
+    }
+
+    pub fn parse<R: Read>(reader: R) -> Result<Self, Box<dyn Error>> {
+        let mut amount_bytes = [0u8; 8];
+        reader.read_exact(&mut amount_bytes)?;
+        
+        let amount = little_endian_to_u64(&amount_bytes);
+
+        // let script_pubkey = Script.parse(S);
+
+        Ok(Self { amount, script_pubkey })
+    }
+
+    pub fn serialize(&self) -> Result<Vec<u8>, Box<dyn Error>> {
+        let mut result = Vec::<u8>::new();
+
+        let mut amount = self.amount.to_le_bytes();
+        result.append(&mut amount.to_vec());
+
+        // let mut script_pubkey = self.script_pubkey.serialize(); // to do
+        // result.append(&mut amount.to_vec());
+
+        Ok(result)
+    }
+}
+
+impl Display for TxOut {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.amount, hex::encode(self.script_pubkey))
+    }
+}
+
+
+
+//---------------------
+//       test
+//---------------------
 #[cfg(test)]
 mod tx_test {
     use super::*;
@@ -232,5 +370,3 @@ mod tx_test {
     }
 }
 
-#[derive(Hash, Debug, Clone)]
-pub struct TxOut {}

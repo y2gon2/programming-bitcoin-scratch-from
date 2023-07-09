@@ -13,6 +13,17 @@ pub fn little_endian_to_u32(four_u8: &Vec<u8>) -> u32 {
     result
 } 
 
+// 입력된 u8 8개의 입력값을 litte endian serialize 로 변환 및 계산된 u64 값으로 변환
+pub fn little_endian_to_u64(eight_u8: &[u8; 8]) -> u64 {
+    let mut result: u64 = 0;
+
+    for (idx, &byte) in eight_u8.iter().enumerate() {
+        result += (byte as u64) << (8 * idx);
+    }
+
+    result
+}
+
 pub fn u32_to_little_endian(input: u32, len: u8) -> Result<Vec<u8>, Box<dyn Error>> {
     match len {
         2 => {
