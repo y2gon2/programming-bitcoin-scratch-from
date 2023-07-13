@@ -1,12 +1,15 @@
 use std::error::Error;
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
-use std::collections::hash_map::DefaultHasher;
-use std::io::{stdin, stdout, Read, Write};
+use std::collections::hash_map::{DefaultHasher, HashMap};
+use std::io::{stdin, stdout, Read, Write, Cursor};
 use serde::ser::{Serialize, Serializer, SerializeStruct};
 use sha2::{Sha256, Digest};
 use hex;
 use bincode;
+use byteorder::{ByteOrder, LittleEndian};
+use anyhow::{bail, Result};
+
 
 use crate::models::helper::*;
 
@@ -14,8 +17,8 @@ use crate::models::helper::*;
 //         Tx
 //---------------------
 
-type version = u32;
-type locktime = u32;
+type version = i32;
+type locktime = i32;
 
 #[derive(Hash, Debug, Clone)]
 pub struct Tx {
@@ -27,7 +30,6 @@ pub struct Tx {
 }
 
 impl Tx {
-
     pub fn new(
         version: version, 
         tx_ins: Option<Vec<TxIn>>, 
@@ -42,7 +44,6 @@ impl Tx {
             testnet: Tx::set_testnet_default(),
         }
     }
-
 
     fn set_testnet_default() -> bool {
         false
@@ -107,7 +108,7 @@ impl Tx {
         })
     }
 
-    fn serialize(&self) -> Result<Vec<u8>, Box<dyn Error>> {
+    pub fn serialize(&self) -> Result<Vec<u8>, Box<dyn Error>> {
         let mut result = Vec::<u8>::new();
 
         let mut version_serde = u32_to_little_endian(self.version, 4)?;
@@ -142,6 +143,26 @@ impl Tx {
         };        
 
         Ok(result)
+    }
+
+    // Bitcoin 의 일반적 수수료 산정으 해당 거래의 입력 총합 - 출력 총합
+    // 해당 수수료는 채굴자에게 지급 (해당 내용은 구현 X)
+    pub fn fee(&self, tx_fetcher: &mut TxFetcher) -> Result<u64, Box<dyn Error>> {
+        let (mut input_sum, mut output_sum) = (0u64, 0u64);
+
+        if let Some(tx_ins) = self.tx_ins {
+            for tx_in in tx_ins {
+                input_sum += tx_in.value(tx_fetcher)?;
+            }
+        }
+
+        if let Some(tx_outs) = self.tx_outs {
+            for tx_out in tx_outs {
+                output_sum += tx_out.amount;
+            }
+        }
+
+        Ok(input_sum - output_sum)
     }
  }
 
@@ -180,7 +201,7 @@ impl Display for Tx {
 //       TxIn
 //---------------------
 
-type PrevTx = [u8; 32];
+type PrevTx = Vec<u8>;
 type PrevIndex = u32;
 type ScriptSig = Vec<u8>; 
 type Sequence = u32;
@@ -226,19 +247,20 @@ impl TxIn {
         prev_tx: PrevTx, 
         prev_index: PrevIndex, 
         script_sig: Option<ScriptSig>, 
+        sequence: Option<Sequence>,
     ) -> Self {
         Self {
             prev_tx,
             prev_index,
             script_sig,
-            sequence: 0xffffffff,
+            sequence: sequence.unwrap_or(0xffffffff),
         }
     } 
 
     pub fn parse<R: Read>(reader: R) -> Result<Self, Box<dyn Error>> {
         
         // prev_tx (32bytes, little-endian)
-        let mut prev_tx = [0u8; 32];
+        let mut prev_tx = Vec::<u8>::new();
         reader.read_exact(&mut prev_tx)?;
         prev_tx.reverse();
 
@@ -263,7 +285,7 @@ impl TxIn {
         })
     }
 
-    fn serialize(&self) -> Result<Vec<u8>, Box<dyn Error>> {
+    pub fn serialize(&self) -> Result<Vec<u8>, Box<dyn Error>> {
         let mut result: Vec<u8> = self.prev_tx.to_vec();
         result.reverse();
 
@@ -276,6 +298,28 @@ impl TxIn {
         result.append(&mut sequence_ser);
 
         Ok(result)
+    }
+
+    pub fn fetch_tx(&self, tx_fetcher: &mut TxFetcher) -> Result<Tx, Box<dyn Error>>{
+        let tx = TxFetcher::fetch(
+            tx_fetcher, 
+            hex::encode(self.prev_tx), 
+            false, 
+            false
+        )?;
+        Ok(tx)
+    }
+
+    pub fn value(&self, tx_fetcher: &mut TxFetcher) -> Result<Amount, Box<dyn Error>> {
+        let mut tx = self.fetch_tx(tx_fetcher)?;
+        let tx_outs = tx.tx_outs.unwrap();
+        Ok(tx_outs[self.prev_index as usize].amount)
+    }
+
+    pub fn script_pubkey(&self, tx_fetchre: &mut TxFetcher) -> Result<ScriptPubkey, Box<dyn Error>>{
+        let tx = self.fetch_tx(tx_fetchre)?;
+        let tx_outs = tx.tx_outs.unwrap();
+        Ok(tx_outs[self.prev_index as usize].script_pubkey)
     }
 }
 
@@ -351,6 +395,91 @@ impl Display for TxOut {
     }
 }
 
+//---------------------
+//     TxFetcher
+//---------------------
+// Transaction Fetcher 필요성
+// 특정 bitcoin transaction 의 정보를 검색 (retrieval) 하는데 필요한 작업을 수행
+// transaction ID 를 사용하여 해당 transaction 의 상세 정보를 bitcoin network (또는 testnet)
+// 에서 가져옴.
+//
+// 주요 작업
+// 1. transaction 확인 : 특정 transaction 이 성공적으로 처리되었는지 확인하기 위해,
+//                       해당 transaction 의 상태를 확인
+// 2. transaction detail 확인: transaction input, output, fee, locktime 등의 세부정보 확인
+// 3. transaction history 분석: 특정 주소화 관련된 transaction history 분석을 위해 transaction 검색 
+// 4. transaction fee 관련 : transaction 을 생성할 때, 수수료를 명시적을 설정해야 하며, 보통 거래 용랑에 비례함.
+//                          수수료 계산을 위해 transaction 정보 (input/output 수, script 복잡성 등)
+//                          필요하므로 이때 fechter 사용
+
+type Cache = HashMap<String, Tx>;
+// key  : transaction ID 
+// value: Tx instance 
+
+pub struct TxFetcher {
+    cache: Cache,
+}
+
+impl TxFetcher {
+    pub fn get_url(&self, testnet: bool) -> &str {
+        if testnet{
+            return "https://blockstream.info/testnet/api"
+        } else {
+            return "https://blockstream.info/api"
+        }
+    }
+
+    // fresh == true 이면 cache 를 무시하고 항상 새로운 데이터를 가져옴
+    // fresh == false 를 기본으로 하며, cache data 가 있으면 해당 데이터를 사용하고, 
+    // 없는 경우에만 새로운 데이터를 가져옴
+    // ur1 = "https://blockchain.info/rawtx/{tx_id}?format=hex"
+    // -> Blockchain.info API를 통해 트랜잭션의 원시 데이터를 가져오기 위한 엔드포인트
+    pub fn fetch(&mut self, tx_id: String, testnet: bool, fresh: bool) -> Result<Tx, Box<dyn Error>> {
+        let mut tx = if fresh || !self.cache.contains_key(&tx_id) {
+            let url = format!("{}/tx/{}/hex", self.get_url(testnet), &tx_id);
+            let response = reqwest::blocking::get(&url)?.text()?;
+            let mut raw = hex::decode(response.trim())?;
+
+            // 5 번째 byte 를 확인하는 이유
+            // version field (0~4 번째 bytes) 를 확인하여 transaction 의 형식을 지정하는데 사용할 수 있으나
+            // 해당 구현에서는 Segwit (Segregated Witness) flag 를 확인 
+            // 이는 bitcoin protocol 개선을 위한 일환으로 도입된 flag field
+            // Segwit flag byte 의 위치가 5번째이며, 해당 byte 가 0x00 이 면 SegWit transaction 임을 의미
+            // 따라서 해당 byte 가 0 일 때와 아닐때 각각 다른 처리가 필요함.
+            let tx = if raw[4] == 0 {
+
+                // 실제로 제거할 때는 SegWit 5번째 byte 와 함께 marker field (6번째, 1byte)도
+                // 함께 제거한다. 
+                // marker field 의 값은 항상 0 이며, SegWit transaction 임을 나타내는 역할을 하므로
+                // SegWit 와 함께 삭제 된다.  
+                raw.splice(4..6, []);
+
+                // Cursor struct 를 사용하여 in-memory Buffer 에 입력된 raw transation data 를 넣음. 
+                let mut tx = Tx::parse(&mut Cursor::new(raw.clone()), testnet)?;
+                tx.locktime = Some(LittleEndian::read_i32(&raw[raw.len() - 4..]));
+                tx
+            } else {
+                Tx::parse(&mut Cursor::new(raw), testnet)?
+            };
+
+            if tx.id()? != tx_id {
+                let msg = format!("not the same id: {} vs {}", tx.id()?, tx_id);
+                return Err(msg.into());
+            }
+            self.cache.insert(tx_id.to_string(), tx.clone());
+            tx
+        } else {
+            // 기존에 받은 tx_id 를 그대로 쓸 경우 cache 내 에서 찾아서 사용
+            self.cache.get(&tx_id).unwrap().clone()
+        };
+
+        tx.testnet = testnet;
+        self.cache.insert(tx_id, tx);
+
+        Ok(tx)
+    } 
+}
+
 
 
 //---------------------
@@ -367,6 +496,57 @@ mod tx_test {
         let t1 = Tx::parse()?;
         println!("{:?}", &t1);
         Ok(())
+    }
+
+    #[test]
+    fn reqwest_get() -> Result<(), reqwest::Error> {
+        async {
+            let body = reqwest::get("https://www.rust-lang.org").await?;
+            let content = body.text().await?;
+            println!("{}", body);
+        };
+
+        Ok(())
+    }
+
+    #[test]
+    fn bincode_test() {
+        use bincode::{serialize, deserialize};
+        use serde::{Serialize, Deserialize};
+
+        #[derive(Serialize, Deserialize, PartialEq, Debug)]
+        struct TestStruct {
+            a: u32,
+            b: u64,
+        }
+
+        let test_struct = TestStruct { a: 5, b: 10 };
+        let encoded: Vec<u8> = serialize(&test_struct).unwrap();
+        let decoded: TestStruct = deserialize(&encoded).unwrap();
+        assert_eq!(test_struct, decoded);    
+    }    
+    
+    #[test]
+    fn bincode_test2() {
+        use std::io::Cursor;
+        use bincode::{serialize_into, deserialize_from};
+        use serde::{Serialize, Deserialize};
+
+        #[derive(Serialize, Deserialize, Debug, PartialEq)]
+        struct Testc {
+            a: u32,
+            b: u32,
+        }
+
+        let testc = Testc {a: 5, b: 10};
+        let mut buffer = Cursor::new(Vec::new());
+        serialize_into(&mut buffer, &testc).unwrap();
+
+        buffer.set_position(0);
+
+        let decode = deserialize_from(&mut buffer).unwrap();
+
+        assert!(testc == decode);
     }
 }
 
