@@ -1,27 +1,33 @@
-use std::io::{Read};
+use std::io::{Read, Write};
 use std::error::Error;
 use std::fmt::Display;
 
-use byteorder::{ByteOrder, LittleEndian};
+use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 use crate::models::helper::*;
 use hex;
 
+#[derive(Debug)]
+enum Cmd {
+    OpCode(u8),        
+    BytesData(Vec<u8>),
+}
+
 pub struct Script {
-    cmds: Vec<Vec<u8>>,
+    cmds: Vec<Cmd>,
 }
 
 impl Script {
-    pub fn new(cmds: Option<Vec<Vec<u8>>>) -> Self {
+    pub fn new(cmds: Option<Vec<Cmd>>) -> Self {
         match cmds {
-            Some(cmds) => Self { cmds },
-            None => Self { cmds: Vec::<Vec<u8>>::new() },
+            Some(c) => Self { cmds: c },
+            None => Self { cmds: Vec::<Cmd>::new() },
         }
     }
 
     pub fn parse<R: Read>(reader: &mut R) -> Result<Self, Box<dyn Error>> {
         let length = read_varint(reader)?;
 
-        let mut cmds = Vec::<Vec<u8>>::new();
+        let mut cmds = Vec::<Cmd>::new();
         let mut count = 0usize;
 
         while count < length as usize {
@@ -37,7 +43,7 @@ impl Script {
                 let mut cmd_buf = vec![0u8; buf_len];
                 
                 reader.read_exact(&mut cmd_buf)?;
-                cmds.push(cmd_buf);
+                cmds.push(Cmd::BytesData(cmd_buf));
 
                 count += buf_len;
 
@@ -52,7 +58,7 @@ impl Script {
                 let mut buf_data = vec![0u8; data_length as usize];
                 reader.read_exact(&mut buf_data)?;
                 
-                cmds.push(buf_data);
+                cmds.push(Cmd::BytesData(buf_data));
                 count += 1;
 
             // 77 : OP_push data2 
@@ -66,12 +72,12 @@ impl Script {
                 let mut buf_data = vec![0u8; data_length as usize];
                 reader.read_exact(&mut buf_data)?;
 
-                cmds.push(buf_data);
+                cmds.push(Cmd::BytesData(buf_data));
                 count += 2;
 
             // 78 이상은 자체 OP-code 이므로 추가로 읽을 필요없이 해당 1byte 만큼만 stack 에 추가
             } else {
-                cmds.push(current.to_vec());
+                cmds.push(Cmd::OpCode(cur_byte));
             }
         } 
         if count != length as usize {
@@ -81,27 +87,49 @@ impl Script {
         Ok(Self { cmds })
     }
 
-    fn raw_serialize(&self) -> Vec<u8> {
+    // Script 에 저장된 OP-code, Data 길이를 저장 
+    fn raw_serialize(&self) -> Result<Vec<u8>, Box<dyn Error>> {
         let mut result = Vec::<u8>::new();
 
         for cmd in &self.cmds {
-            if cmd.len() == 1 {
-                result.write_u8(*cmd[0]).unwrap();
-            } else {
-                // let length = cmd.len();
+            match cmd {
+                Cmd::OpCode(int_val) => { result.write_u8(*int_val).unwrap() },
+                Cmd::BytesData(data_val) => {
+                    let length = data_val.len();
 
-                // if length < 75 {
-                //     result = 
-                // } else if {
+                    // 1 ~ 75 bytes 범위의 data 길이 == 1byte 값 이므로
+                    if length < 75 {
+                        result.write_u8(length as u8).unwrap();
 
-                // } else if {
+                    // 76 ~ 255 bytes 범위의 data 길이 
+                    // 1st byte : 76  2dn byte : 해당 data 길이
+                    } else if length > 75 && length < 0x100 { 
+                        result.write_u8(76 as u8).unwrap();
+                        result.write_u8(length as u8).unwrap();
 
-                // } else {
-
-                // }
+                    // 256 ~520 bytes 범위의 data 길이
+                    // 1st byte : 77, 2 ~3 bytes: 해다 data 길이
+                    } else if length >= 0x00 && length <= 520 {
+                        result.write_u8(77 as u8).unwrap();
+                        result.write_u16::<LittleEndian>(length as u16).unwrap();
+                    } else {
+                        return Err("cmd too long".into())
+                    }
+                    // 실제 data 넣음
+                    result.write_all(data_val).unwrap();
+                },
             }
         }
-        result
+        Ok(result)
+    }
+
+    pub fn serialize(&self) -> Result<Vec<u8>, Box<dyn Error>> {
+        let mut result = self.raw_serialize()?;
+        let total = result.len() as u32;
+        let mut encoded = encode_varint(total)?;
+        encoded.append(&mut result);
+
+        Ok(encoded)
     }
 }
 
