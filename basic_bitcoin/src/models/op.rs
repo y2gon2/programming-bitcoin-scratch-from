@@ -1,7 +1,6 @@
 use std::ops::{Deref, DerefMut};
-use hex::encode;
-use sha1::{Sha1};
-use sha2::{Sha256, Sha512, Digest};
+use sha1::Sha1;
+use sha2::{Sha256, Digest};
 use ripemd::Ripemd160;
 
 
@@ -90,9 +89,6 @@ pub fn decode_num(element:&Vec<u8>) -> i32 {
         result
     }
 }
-
-
-
 
 
 /// OP-code : 0  
@@ -657,7 +653,7 @@ pub fn op_abs(stack: &mut Stack) -> bool {
     if stack.is_empty() { return false; }
 
     let n = decode_num(&stack.pop().unwrap());
-    if element < 0 {
+    if n < 0 {
         stack.push(encode_num(-n));
     } else {
         stack.push(encode_num(n));
@@ -1014,31 +1010,222 @@ pub fn po_hash256(stack: &mut Stack) -> bool {
     true
 }
 
-/// op_code :
-pub fn op_(stack: &mut Stack) -> bool {
-    stack.push(encode_num());
+/// op_code : 171
+/// 생략 (현재 단계에서 구현 어려움)
+/// script 내에서 현재 위치 이후의 연산자들만 고려하는 특별한 체크포인트를 설정
+/// 이 연산자는 transaction의 서명을 검증하는 과정에서 사용
+/// script 가 이 연산자를 만나면, 이 연산자 이후의 부분만이 서명 hash의 생성에 사용됩니다.
+// pub fn op_codeseparator(stack: &mut Stack) -> bool {
+    
+//     true
+// }
+
+
+/// op_code : 172
+/// stack 최상단 2 개의 element 를 각각 공개키와 서명으로 사용하여 taansaction 서명을 검증
+/// 서명이 공개키와 일치하는지를 확인 후 , 검증 결과(true: 1, flase: 00)를 stack 에 다시 push 
+pub fn op_checksig(stack: &mut Stack) -> bool {
+    // to do
     true
 }
 
-/// op_code :
-pub fn op_(stack: &mut Stack) -> bool {
-    stack.push(encode_num());
+/// op_code : 173
+/// checksig 와 유사하지만, 검증에 실패할 경우 return false 로 실행 중단 
+/// 성공할 경우 true (정상 실행 유지) 반환 (stack push X)
+pub fn op_checksigverify(stack: &mut Stack) -> bool {
+    // to do
     true
 }
 
-/// op_code :
-pub fn op_(stack: &mut Stack) -> bool {
-    stack.push(encode_num());
+/// op_code : 174
+/// 다수의 서명(multisig)를 검증
+/// stack 가장 위의 element은 공개키 개수를, 그 아래 element 는 서명의 개수
+/// 모든 서명이 검증에 성공하면 1(true), 그렇지 않으면 0(false) 을 stack 에 push
+pub fn op_checkmultisig(stack: &mut Stack) -> bool {
+    // to do
     true
 }
 
-/// op_
-/// op_code_function: 
+/// op_code : 175
+/// op_checkmultisig 에서 stack push 없이 검증이 실패하면 false 를 return 하여 실행 중단
+pub fn op_checkmultisigverify(stack: &mut Stack) -> bool {
+    // to do
+    true
+}
 
+/// op_code : 177
+/// OP_CHECKLOCKTIMEVERIFY (CLTV) 특정 시간 (locktime) 이후 bitcoin 사용할 수 있게 함. 
+/// 추후 코드 검증 필요
+pub fn op_checklocktimeverify(stack: &mut Stack, locktime: u32, sequence: u32) -> bool {
+    if sequence == 0xffffffff { return false; }
+    if stack.is_empty() { return false; }
 
-/// op_
-/// op_code_function: 
-fn ex() {}
+    if let Some(element) = stack.last() {
+        let n = decode_num(element);
+
+        if n < 0 { return false; }
+
+        // 500,000,000 의 의미
+        // locktime <= 500,000,000 이면 block 높이
+        // locktime < 500,000,000 이면 Unix Epoch Time 으로 해석됨,
+        // stack 에서 가져온 값이 앞의 locktime 의 해석 조건과 동일해야 하므로 
+        // 아래 조건이 충족되면 false return 
+        //
+        // 500,000,000 초는 1970년 00:00:00 으로 부터 약 15.85년 으로 
+        // 이값을 초과하는 locktime 은 Unix 시간으로 해석되며
+        // 그 이하는 block 의 높이로 해석되도록 Bitcoin protocol 상 설계되어 있음.
+        if n < 500_000_000 && locktime > 500_000_000 { return false; }
+
+        // 해당 조건은 아직 transaction 이 실행 될 시점 또는 블록 높이에 도달하지 않았기 때문에
+        // 사용될 수 없음을 만드는 코드 조각.
+        if locktime < n as u32 { return false; }
+    }
+    true
+}
+
+/// op_code : 178
+/// OP_CHECKSEQUENCEVERIFY (CSV) 는 sequence 번호가 지나야 bitcoin 을 사용할 수 있게 함.
+/// (해당 transaction output 을 해당 시간 기간동안 잠그는데 사용) 
+/// 추후 코드 검증 필요
+pub fn op_checksequenceverify(stack: &mut Stack, version: u32, sequence: u32) -> bool {
+    
+    // sequence field 최상위 bit 가 1 인 경우 기존의 상대적인 시간 잠금
+    // (block 이 채굴된 이후 경과된 시간)이 무시되고,
+    // 전통적인 nLockTime (특정 block 높이 또는 시간) 에 의해 잠겨짐 
+    // 이는 Bitcoin protocol 상 설정되어 있음
+    if sequence & (1 << 31) == (1 << 31) { return false; }
+    if stack.is_empty() { return false; }
+
+    if let Some(element) = stack.last() {
+        let n = decode_num(element);
+
+        if n < 0 { return false; }
+        let n_u32 = n as u32;
+
+        if n_u32 & (1 << 31) == (1 << 31) { 
+
+            // 상대적인 locktime 설정은 version 2 이후부터 사용 가능하므로
+            // 이것은 Bitcoin Improvement Proposal (BIP) 68과 112에 의해 도입된 변경 사항임. 
+            // BIP 68은 nSequence 필드에 상대적인 블록 높이 또는 시간을 지정할 수 있게 하였고, 
+            // BIP 112는 OP_CHECKSEQUENCEVERIFY (CSV)를 도입하여 이를 활용할 수 있게 하였음. 
+            // 이들 BIP는 Bitcoin의 트랜잭션 버전 2에서 도입됨.
+            if version < 2 { 
+                return false; 
+                
+            // 앞에서 최상의 bit 에 대한 검사 처리를 했는데, 여기서 또 해야 하는지..
+            // 확인 가능 자료가 없어서 그대로 둠
+            } else if sequence & (1 << 31) == (1 << 31) {
+                return false;
+
+            // BIP 68에서 도입된 상대적인 잠금 시간 기능은 nSequence 필드의 비트를 
+            // 특정한 방식으로 해석하도록 변경하였으며, 이는 nSequence 필드의 22번째 비트는 
+            // 이 필드의 나머지 부분이 블록 높이를 기준으로 한 상대적인 잠금 시간을 나타내는지 
+            // (22번째 비트가 0인 경우), 아니면 초 단위로 표현된 시간을 기준으로 한 
+            // 상대적인 잠금 시간을 나타내는지 (22번째 비트가 1인 경우)를 결정.    
+            } else if n_u32 & (1 << 22) != sequence & (1 << 22) {
+                return false;
+            } else if n_u32 & 0xffff > sequence &  0xffff {
+                return false;
+            }
+        }
+    }
+
+    true
+}
+
+// OP_FUNCTION  구현 현황
+
+    // 0: 'OP_0',               작성 완료
+    // 76: 'OP_PUSHDATA1',      미작성
+    // 77: 'OP_PUSHDATA2',      미작성
+    // 78: 'OP_PUSHDATA4',      미작성
+    // 79: 'OP_1NEGATE',        작성 완료
+    // 81: 'OP_1',              작성 완료
+    // 82: 'OP_2',              작성 완료
+    // 83: 'OP_3',              작성 완료
+    // 84: 'OP_4',              작성 완료
+    // 85: 'OP_5',              작성 완료
+    // 86: 'OP_6',              작성 완료
+    // 87: 'OP_7',              작성 완료
+    // 88: 'OP_8',              작성 완료
+    // 89: 'OP_9',              작성 완료
+    // 90: 'OP_10',             작성 완료
+    // 91: 'OP_11',             작성 완료
+    // 92: 'OP_12',             작성 완료
+    // 93: 'OP_13',             작성 완료
+    // 94: 'OP_14',             작성 완료
+    // 95: 'OP_15',             작성 완료
+    // 96: 'OP_16',             작성 완료
+    // 97: 'OP_NOP',            작성 완료
+    // 99: 'OP_IF',             작성 완료
+    // 100: 'OP_NOTIF',         작성 완료
+    // 103: 'OP_ELSE',          미작성
+    // 104: 'OP_ENDIF',         미작성
+    // 105: 'OP_VERIFY',        작성 완료
+    // 106: 'OP_RETURN',        작성 완료
+    // 107: 'OP_TOALTSTACK',    작성 완료
+    // 108: 'OP_FROMALTSTACK',  작성 완료
+    // 109: 'OP_2DROP',         작성 완료
+    // 110: 'OP_2DUP',          작성 완료
+    // 111: 'OP_3DUP',          작성 완료
+    // 112: 'OP_2OVER',         작성 완료
+    // 113: 'OP_2ROT',          작성 완료
+    // 114: 'OP_2SWAP',         작성 완료
+    // 115: 'OP_IFDUP',         작성 완료
+    // 116: 'OP_DEPTH',         작성 완료
+    // 117: 'OP_DROP',          작성 완료
+    // 118: 'OP_DUP',	        작성 완료
+    // 119: 'OP_NIP',           작성 완료
+    // 120: 'OP_OVER',          작성 완료
+    // 121: 'OP_PICK',          작성 완료
+    // 122: 'OP_ROLL',          작성 완료
+    // 123: 'OP_ROT',           작성 완료
+    // 124: 'OP_SWAP',          작성 완료
+    // 125: 'OP_TUCK',          작성 완료
+    // 130: 'OP_SIZE',          작성 완료
+    // 135: 'OP_EQUAL',         작성 완료
+    // 136: 'OP_EQUALVERIFY',   작성 완료
+    // 139: 'OP_1ADD',          작성 완료
+    // 140: 'OP_1SUB',          작성 완료
+    // 143: 'OP_NEGATE',        작성 완료
+    // 144: 'OP_ABS',           작성 완료
+    // 145: 'OP_NOT',           작성 완료
+    // 146: 'OP_0NOTEQUAL',     작성 완료
+    // 147: 'OP_ADD',           작성 완료
+    // 148: 'OP_SUB',           작성 완료
+    // 149: 'OP_MUL',           작성 완료
+    // 154: 'OP_BOOLAND',       작성 완료
+    // 155: 'OP_BOOLOR',        작성 완료
+    // 156: 'OP_NUMEQUAL',      작성 완료
+    // 157: 'OP_NUMEQUALVERIFY',작성 완료
+    // 158: 'OP_NUMNOTEQUAL',   작성 완료
+    // 159: 'OP_LESSTHAN',      작성 완료
+    // 160: 'OP_GREATERTHAN',   작성 완료
+    // 161: 'OP_LESSTHANOREQUAL',   작성 완료
+    // 162: 'OP_GREATERTHANOREQUAL',작성 완료
+    // 163: 'OP_MIN',           작성 완료
+    // 164: 'OP_MAX',           작성 완료
+    // 165: 'OP_WITHIN',        작성 완료
+    // 166: 'OP_RIPEMD160',     작성 완료
+    // 167: 'OP_SHA1',          작성 완료
+    // 168: 'OP_SHA256',        작성 완료
+    // 169: 'OP_HASH160',       작성 완료
+    // 170: 'OP_HASH256',	    작성 완료
+    // 171: 'OP_CODESEPARATOR', 미작성
+    // 172: 'OP_CHECKSIG',      미작성
+    // 173: 'OP_CHECKSIGVERIFY',미작성
+    // 174: 'OP_CHECKMULTISIG', 미작성
+    // 175: 'OP_CHECKMULTISIGVERIFY', 미작성
+    // 176: 'OP_NOP1',          미작성
+    // 177: 'OP_CHECKLOCKTIMEVERIFY',  작성완료(검증필요)
+    // 178: 'OP_CHECKSEQUENCEVERIFY',  작성완료(검증필요)
+    // 179: 'OP_NOP4',          미작성
+    // 180: 'OP_NOP5',          미작성
+    // 181: 'OP_NOP6',          미작성
+    // 182: 'OP_NOP7',          미작성
+    // 183: 'OP_NOP8',          미작성
+    // 184: 'OP_NOP9',          미작성
+    // 185: 'OP_NOP10',         미작성
 
 
 #[cfg(test)]
