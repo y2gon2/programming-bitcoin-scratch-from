@@ -135,120 +135,127 @@ impl Script {
 
 impl Display for Script {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut messages = String::new();
+        let mut messages = Vec::<String>::new();
         
         for cmd in self.cmds.iter() {
-            if cmd.len() == 1 {
-                let mut msg = "";
-                match cmd[0] {
-                    0 => msg = "OP_0",
-                    76 => msg = "OP_PUSHDATA1",
-                    77 => msg = "OP_PUSHDATA2",
-                    78 => msg = "OP_PUSHDATA4",
-                    79 => msg = "OP_1NEGATE",
-                    81 => msg = "OP_1",
-                    82 => msg = "OP_2",
-                    83 => msg = "OP_3",
-                    84 => msg = "OP_4",
-                    85 => msg = "OP_5",
-                    86 => msg = "OP_6",
-                    87 => msg = "OP_7",
-                    88 => msg = "OP_8",
-                    89 => msg = "OP_9",
-                    90 => msg = "OP_10",
-                    91 => msg = "OP_11",
-                    92 => msg = "OP_12",
-                    93 => msg = "OP_13",
-                    94 => msg = "OP_14",
-                    95 => msg = "OP_15",
-                    96 => msg = "OP_16",
-                    97 => msg = "OP_NOP",
-                    99 => msg = "OP_IF",
-                    100 => msg = "OP_NOTIF",
-                    103 => msg = "OP_ELSE",
-                    104 => msg = "OP_ENDIF",
-                    105 => msg = "OP_VERIFY",
-                    106 => msg = "OP_RETURN",
-                    107 => msg = "OP_TOALTSTACK",
-                    108 => msg = "OP_FROMALTSTACK",
-                    109 => msg = "OP_2DROP",
-                    110 => msg = "OP_2DUP",
-                    111 => msg = "OP_3DUP",
-                    112 => msg = "OP_2OVER",
-                    113 => msg = "OP_2ROT",
-                    114 => msg = "OP_2SWAP",
-                    115 => msg = "OP_IFDUP",
-                    116 => msg = "OP_DEPTH",
-                    117 => msg = "OP_DROP",
-                    118 => msg = "OP_DUP",
-                    119 => msg = "OP_NIP",
-                    120 => msg = "OP_OVER",
-                    121 => msg = "OP_PICK",
-                    122 => msg = "OP_ROLL",
-                    123 => msg = "OP_ROT",
-                    124 => msg = "OP_SWAP",
-                    125 => msg = "OP_TUCK",
-                    130 => msg = "OP_SIZE",
-                    135 => msg = "OP_EQUAL",
-                    136 => msg = "OP_EQUALVERIFY",
-                    139 => msg = "OP_1ADD",
-                    140 => msg = "OP_1SUB",
-                    143 => msg = "OP_NEGATE",
-                    144 => msg = "'OP_ABS",
-                    145 => msg = "OP_NOT",
-                    146 => msg = "OP_0NOTEQUAL",
-                    147 => msg = "OP_ADD",
-                    148 => msg = "OP_SUB",
-                    149 => msg = "OP_MUL",
-                    154 => msg = "OP_BOOLAND",
-                    155 => msg = "OP_BOOLOR",
-                    156 => msg = "OP_NUMEQUAL",
-                    157 => msg = "OP_NUMEQUALVERIFY",
-                    158 => msg = "OP_NUMNOTEQUAL",
-                    159 => msg = "OP_LESSTHAN",
-                    160 => msg = "OP_GREATERTHAN",
-                    161 => msg = "OP_LESSTHANOREQUAL",
-                    162 => msg = "OP_GREATERTHANOREQUAL",
-                    163 => msg = "OP_MIN",
-                    164 => msg = "OP_MAX",
-                    165 => msg = "OP_WITHIN",
-                    166 => msg = "OP_RIPEMD160",
-                    167 => msg = "OP_SHA1",
-                    168 => msg = "OP_SHA256",
-                    169 => msg = "OP_HASH160",
-                    170 => msg = "OP_HASH256",
-                    171 => msg = "OP_CODESEPARATOR",
-                    172 => msg = "OP_CHECKSIG",
-                    173 => msg = "OP_CHECKSIGVERIFY",
-                    174 => msg = "OP_CHECKMULTISIG",
-                    175 => msg = "OP_CHECKMULTISIGVERIFY",
-                    176 => msg = "OP_NOP1",
-                    177 => msg = "OP_CHECKLOCKTIMEVERIFY",
-                    178 => msg = "OP_CHECKSEQUENCEVERIFY",
-                    179 => msg = "OP_NOP4",
-                    180 => msg = "OP_NOP5",
-                    181 => msg = "OP_NOP6",
-                    182 => msg = "OP_NOP7",
-                    183 => msg = "OP_NOP8",
-                    184 => msg = "OP_NOP9",
-                    185 => msg = "OP_NOP10",
-                    others => msg = format!("OP_[{}]", others).as_str(),
-                }
-                messages += " ";
-                messages += msg;
-            } else {
-                let hex_string: String = cmd.iter().map(|b| format!("{:02x}", b)).collect();
-                messages += " ";
-                messages += hex_string.as_str();
-            }
+            match cmd {
+                Cmd::OpCode(code) => {
+                    let mut msg = "";
+                    match code {
+                        0 => msg = "OP_0",
+                        // 76 => msg = "OP_PUSHDATA1", // 미구현된 연산자
+                        // 77 => msg = "OP_PUSHDATA2", // 미구현된 연산자
+                        // 78 => msg = "OP_PUSHDATA4", // 미구현된 연산자
+                        79 => msg = "OP_1NEGATE",
+                        81 => msg = "OP_1",
+                        82 => msg = "OP_2",
+                        83 => msg = "OP_3",
+                        84 => msg = "OP_4",
+                        85 => msg = "OP_5",
+                        86 => msg = "OP_6",
+                        87 => msg = "OP_7",
+                        88 => msg = "OP_8",
+                        89 => msg = "OP_9",
+                        90 => msg = "OP_10",
+                        91 => msg = "OP_11",
+                        92 => msg = "OP_12",
+                        93 => msg = "OP_13",
+                        94 => msg = "OP_14",
+                        95 => msg = "OP_15",
+                        96 => msg = "OP_16",
+                        97 => msg = "OP_NOP",
+                        99 => msg = "OP_IF",
+                        100 => msg = "OP_NOTIF",
+                        // 103 => msg = "OP_ELSE",   // 미구현된 연산자
+                        // 104 => msg = "OP_ENDIF",  // 미구현된 연산자
+                        105 => msg = "OP_VERIFY",
+                        106 => msg = "OP_RETURN",
+                        107 => msg = "OP_TOALTSTACK",
+                        108 => msg = "OP_FROMALTSTACK",
+                        109 => msg = "OP_2DROP",
+                        110 => msg = "OP_2DUP",
+                        111 => msg = "OP_3DUP",
+                        112 => msg = "OP_2OVER",
+                        113 => msg = "OP_2ROT",
+                        114 => msg = "OP_2SWAP",
+                        115 => msg = "OP_IFDUP",
+                        116 => msg = "OP_DEPTH",
+                        117 => msg = "OP_DROP",
+                        118 => msg = "OP_DUP",
+                        119 => msg = "OP_NIP",
+                        120 => msg = "OP_OVER",
+                        121 => msg = "OP_PICK",
+                        122 => msg = "OP_ROLL",
+                        123 => msg = "OP_ROT",
+                        124 => msg = "OP_SWAP",
+                        125 => msg = "OP_TUCK",
+                        130 => msg = "OP_SIZE",
+                        135 => msg = "OP_EQUAL",
+                        136 => msg = "OP_EQUALVERIFY",
+                        139 => msg = "OP_1ADD",
+                        140 => msg = "OP_1SUB",
+                        143 => msg = "OP_NEGATE",
+                        144 => msg = "'OP_ABS",
+                        145 => msg = "OP_NOT",
+                        146 => msg = "OP_0NOTEQUAL",
+                        147 => msg = "OP_ADD",
+                        148 => msg = "OP_SUB",
+                        149 => msg = "OP_MUL",
+                        154 => msg = "OP_BOOLAND",
+                        155 => msg = "OP_BOOLOR",
+                        156 => msg = "OP_NUMEQUAL",
+                        157 => msg = "OP_NUMEQUALVERIFY",
+                        158 => msg = "OP_NUMNOTEQUAL",
+                        159 => msg = "OP_LESSTHAN",
+                        160 => msg = "OP_GREATERTHAN",
+                        161 => msg = "OP_LESSTHANOREQUAL",
+                        162 => msg = "OP_GREATERTHANOREQUAL",
+                        163 => msg = "OP_MIN",
+                        164 => msg = "OP_MAX",
+                        165 => msg = "OP_WITHIN",
+                        166 => msg = "OP_RIPEMD160",
+                        167 => msg = "OP_SHA1",
+                        168 => msg = "OP_SHA256",
+                        169 => msg = "OP_HASH160",
+                        170 => msg = "OP_HASH256",
+                        171 => msg = "OP_CODESEPARATOR",
+                        // 172 => msg = "OP_CHECKSIG",               // 미구현된 연산자
+                        // 173 => msg = "OP_CHECKSIGVERIFY",         // 미구현된 연산자
+                        // 174 => msg = "OP_CHECKMULTISIG",          // 미구현된 연산자
+                        // 175 => msg = "OP_CHECKMULTISIGVERIFY",    // 미구현된 연산자
+                        // 176 => msg = "OP_NOP1",   // 미구현된 연산자
+                        177 => msg = "OP_CHECKLOCKTIMEVERIFY",
+                        178 => msg = "OP_CHECKSEQUENCEVERIFY",
+                        // 179 => msg = "OP_NOP4",   // 미구현된 연산자
+                        // 180 => msg = "OP_NOP5",   // 미구현된 연산자
+                        // 181 => msg = "OP_NOP6",   // 미구현된 연산자
+                        // 182 => msg = "OP_NOP7",   // 미구현된 연산자
+                        // 183 => msg = "OP_NOP8",   // 미구현된 연산자
+                        // 184 => msg = "OP_NOP9",   // 미구현된 연산자
+                        // 185 => msg = "OP_NOP10",  // 미구현된 연산자
+                        others => msg = format!("OP_[{}]", others).as_str(),
+                    }
+                    messages.push(msg.to_string());
+                },
+                Cmd::BytesData(data) => {
+                    let hex_string: String = data.iter().map(|b| format!("{:02x}", b)).collect();
+                    messages.push(hex_string);
+                },
+            } 
         }
-
-        write!(f, "{}", messages)
-        
+        write!(f, "{}", messages.join(" "))
     }
 }
 
-// pub enum CMDs {
-//     OpDup,
-//     OpHash256,
-// }
+
+#[cfg(test)]
+mod test_script {
+    use super::*;
+
+    #[test]
+    fn t_struct () {
+        let a = ["a", "b", "c"];
+        let s = a.join(" ? ");
+        println!("{}", s);
+    }
+}
