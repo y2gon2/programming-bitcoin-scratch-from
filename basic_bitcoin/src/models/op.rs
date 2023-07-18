@@ -1,12 +1,1074 @@
 use std::ops::{Deref, DerefMut};
-use std::collections::HashMap;
 use sha1::Sha1;
 use sha2::{Sha256, Digest};
 use ripemd::Ripemd160;
+use log::info;
 
+
+trait StackOnly {
+
+}
 
 #[derive(Clone, Debug)]
 pub struct Stack(Vec<Vec<u8>>);
+
+impl Stack {
+    pub fn new() -> Self {
+        Self (Vec::<Vec<u8>>::new())
+    }
+    
+    
+    /// OP-code : 0  
+    pub fn op_0(&mut self) -> bool {
+        self.0.push(encode_num(0));
+        true
+    }
+
+    /// op_code : 79
+    pub fn op_1negate(&mut self) -> bool {
+        self.0.push(encode_num(-1));
+        true
+    }
+
+    /// op_code : 81
+    pub fn op_1(&mut self) -> bool {
+        self.0.push(encode_num(1));
+        true
+    }
+
+    /// op_code : 82
+    pub fn op_2(&mut self) -> bool {
+        self.0.push(encode_num(2));
+        true
+    }
+
+    /// op_code : 83
+    pub fn op_3(&mut self) -> bool {
+        self.0.push(encode_num(3));
+        true
+    }
+
+    /// op_code : 84
+    pub fn op_4(&mut self) -> bool {
+        self.0.push(encode_num(4));
+        true
+    }
+
+    /// op_code : 85
+    pub fn op_5(&mut self) -> bool {
+        self.0.push(encode_num(5));
+        true
+    }
+
+    /// op_code : 86
+    pub fn op_6(&mut self) -> bool {
+        self.0.push(encode_num(6));
+        true
+    }
+
+    /// op_code : 87
+    pub fn op_7(&mut self) -> bool {
+        self.push(encode_num(7));
+        true
+    }
+
+    /// op_code : 88
+    pub fn op_8(&mut self) -> bool {
+        self.0.push(encode_num(8));
+        true
+    }
+
+    /// op_code : 89
+    pub fn op_9(&mut self) -> bool {
+        self.0.push(encode_num(9));
+        true
+    }
+
+    /// op_code : 90
+    pub fn op_10(&mut self) -> bool {
+        self.0.push(encode_num(10));
+        true
+    }
+
+
+    /// op_code : 91
+    pub fn op_11(&mut self) -> bool {
+        self.0.push(encode_num(11));
+        true
+    }
+
+    /// op_code : 92
+    pub fn op_12(&mut self) -> bool {
+        self.push(encode_num(12));
+        true
+    }
+
+    /// op_code : 93
+    pub fn op_13(&mut self) -> bool {
+        self.0.push(encode_num(13));
+        true
+    }
+
+    /// op_code : 94
+    pub fn op_14(&mut self) -> bool {
+        self.0.push(encode_num(14));
+        true
+    }
+
+    /// op_code : 95
+    pub fn op_15(&mut self) -> bool {
+        self.0.push(encode_num(15));
+        true
+    }
+
+    /// op_code : 96
+    pub fn op_16(&mut self) -> bool {
+        self.0.push(encode_num(16));
+        true
+    }
+
+    /// op_code : 97
+    pub fn op_nop(&mut self) -> bool {
+        true
+    }
+
+    /// op_code : 99
+    /// 일반 programming language 에서 if 와 유사한 역할
+    /// 사용의 예
+    /// -----------------------------------------------------
+    /// <condition> OP_IF
+    ///     <code to be executed if condition is true>
+    /// OP_ENDIF
+    /// -----------------------------------------------------
+    /// stack 맨 위 요소(<condition>)를 참(일반적으로 0이 아닌) 또는 거짓(일반적으로 0) 으로 해석
+    /// 그 결과에 따라 script 실행 흐름을 제어
+    pub fn op_if(&mut self, items: &mut Vec<u8>) -> bool {
+        if self.0.is_empty() { return false; }
+
+        let mut true_items = Vec::<u8>::new();
+        let mut false_items = Vec::<u8>::new();
+        let mut current_array = &mut true_items;
+
+        let mut found = false;
+        let mut num_endifs_needed = 1usize;
+
+        while !items.is_empty() {
+            let item = items.remove(0);
+            match item {
+                99 | 100 => {
+                    num_endifs_needed += 1;
+                    current_array.push(item);
+                },
+                103 if num_endifs_needed == 1 => {
+                    current_array = &mut false_items;
+                },
+                104 => {
+                    if num_endifs_needed == 1 {
+                        found = true;
+                        break;
+                    } else {
+                        num_endifs_needed -= 1;
+                        current_array.push(item);    
+                    }
+                },
+                _ => { current_array.push(item) }
+            }
+        }
+
+        if !found { return false }
+
+        let element = self.0.pop().unwrap();
+
+        if decode_num(&element) == 0 {
+            items.splice(0..0, false_items);
+        } else {
+            items.splice(0..0, true_items);
+        }
+
+        true
+    }
+
+    /// op_code : 100
+    /// op_if 의 반대로 <condition> 이 거짓(0) 일때 조건을 수행
+    pub fn op_notif(&mut self, items: &mut Vec<u8>) -> bool {
+        if self.0.is_empty() { return false; }
+
+        let mut true_items = Vec::<u8>::new();
+        let mut false_items = Vec::<u8>::new();
+        let mut current_array = &mut true_items;
+        let mut found = false;
+        let mut num_endifs_needed = 1i32;
+
+        while !items.is_empty() {
+            let item = items.remove(0);
+
+            match item {
+                99 | 100 => {
+                    num_endifs_needed += 1;
+                    current_array.push(item);
+                },
+                103 if num_endifs_needed == 1 => {
+                    current_array = &mut false_items;
+                },
+                104 => {
+                    if num_endifs_needed == 1 {
+                        found = true;
+                        break;
+                    } else {
+                        num_endifs_needed -= 1;
+                        current_array.push(item);
+                    }
+                },
+                _ => {
+                    current_array.push(item);
+                },
+            }
+        }
+        if !found { return false; }
+
+        let element = self.0.pop().unwrap();
+        if decode_num(&element) == 0 {
+            items.splice(0..0, true_items);
+        } else {
+            items.splice(0..0, false_items);
+        }
+        true
+    }
+
+    /// op_code : 105
+    /// stack 최상단 element 가 true (0이 아닌) 지를 확인
+    /// 해당 element  0이 아니라면 script 를 계속 진행
+    ///               0이면 script 실행을 즉시 중지
+    /// 위 조건에 따라 op_verify  는 script 가 어떤 조건을 만족하는지 확인하는데 사용
+    /// ex. 특정 signiture 가 올바른지 또는 어떤 계산의 결과가 예상하는 값인지를 확인
+    pub fn op_verify(&mut self) -> bool {
+        if self.0.is_empty() { return false; }
+
+        let element = self.0.pop().unwrap();
+        if decode_num(&element) == 0 {
+            return false;
+        }
+        true
+    }
+
+    /// op_code : 106
+    /// 거래의 유효성을 '무효' 로 설정하여 거래가 blockchain 에 포함되지 않도록함
+    /// 주로 'data carrier' 로 사용됨. 
+    ///   -> Bitcoin context 에서 transaction 의 일부로 data 를 blockchain 에 저장하는 기능을 의미
+    ///      op_return 연산자를 통해 bitcoin transaction 에 임의의 데이터를 포함시킬 수 있는 방법을 제공
+    ///      이 데이터는 거래의 유효성에 영향을 주지 않지만, 외부 응용 프로그램에서 조회하거나 사용할 수 있음
+    ///      예를 들어, 시간 증명, 메타데이터 저장, 디지털 자산 인증, 메시지 등의 목적으로 사용할 수 있음
+    /// 
+    /// OP_RETURN 이 script 에 나타나면 해당 script 는 즉시 중단됨.
+    /// 따라서 OP_RETURN 이후에 나타나는 data 는 script 의 실행에 영항을 주지 않고 무시됨.
+    /// 거래 자체는 블록체인에 포함되지 않으나, OP_RETURN 다음에 오는 데이터는 
+    /// blockchain 의 transaction pool에 일시적으로 저장
+    /// 외부의 application 들이 이 data 를 읽을 수 있음.
+    pub fn op_return(&mut self) -> bool {
+        false
+    }
+
+    /// op_code : 107
+    /// main stack 최상위 element 를 꺼내서 alt_stack 으로 이동
+    /// alt_stack - main stack 의 값을 일시적으로 제거하거나 나중에 사용할 값을 저장하기 위해 사용
+    pub fn op_toaltstack(&mut self, alt_stack: &mut Stack) -> bool {
+        if self.0.is_empty() { return false; }
+
+        if let Some(val) = self.0.pop() {
+            alt_stack.push(val);
+        };
+        true
+    }
+
+    /// op_code : 108
+    /// alt_stack 최상위 element 를 꺼내서 main stack 으로 이동
+    pub fn op_fromaltstack(&mut self, alt_stack: &mut Stack) -> bool {
+        if alt_stack.is_empty() { return false; }
+
+        if let Some(val) = alt_stack.pop() {
+            self.0.push(val);
+        }
+        true
+    }
+
+    /// op_code : 109
+    /// main stack 최상위 2개의 element 를 drop
+    /// transaction 유효성 검사, output 잠금 해제 등을 위해 사용
+    pub fn op_2drop(&mut self) -> bool {
+        let length = self.0.len();
+
+        if length < 2 { return false; }
+
+        self.0.pop().unwrap();
+        self.0.pop().unwrap();
+        true
+    }
+
+    /// op_code : 110
+    /// main stack 최상단 2 개 element 를 복제하여 동일한 순서대로 stack 에 추가
+    pub fn op_2dup(&mut self) -> bool {
+        let length = self.0.len();
+
+        if length < 2 { return false; }
+
+        let end_elements = self.0
+            .iter()
+            .rev()
+            .take(2)
+            .rev()
+            .cloned()
+            .collect::<Vec<_>>();
+
+        self.0.extend(end_elements);
+
+        true
+    }
+
+    /// op_code : 111
+    /// main stack 최상단 3 개 element 를 복제하여 동일한 순서대로 stack 에 추가
+    pub fn op_3dup(&mut self) -> bool {
+        let length = self.0.len();
+
+        if length < 3 { return false; }
+
+        let end_elements = self.0
+            .iter()
+            .rev()
+            .take(3)
+            .rev()
+            .cloned()
+            .collect::<Vec<_>>();
+
+        self.0.extend(end_elements);
+
+        true
+    }
+
+    /// op_code : 112
+    /// stack 두 번째 쌍의 두 항목을 복사하여 stack 의 맨 위로 가져옴
+    /// vec![... x, y, z, w] => vec![... x, y, z, w, x, y]
+    pub fn op_2over(&mut self) -> bool {
+        let length = self.0.len();
+
+        if length < 4 { return false; }
+        let stack_slice = self.0[length - 4.. length - 2].to_vec();
+        self.0.extend(stack_slice);
+        true
+    }
+
+    /// op_code : 113
+    /// stack 세 번째 쌍의 두 항목을 제거하고 stack 의 맨 위로 이동
+    /// vec![... x, y, z, w, a, b] => vec![... z, w, a, b, x, y]
+    pub fn op_2rot(&mut self) -> bool {
+        let length = self.0.len();
+
+        if length < 6 { return false; }
+
+        let slice = self.0[length - 6..length - 4].to_vec();
+        self.0.splice(length - 6..length - 4, []);
+        self.0.extend(slice);
+        true
+    }
+
+    /// op_code : 114
+    /// stack 상위 두 쌍의 항목를 서로 바꿈
+    /// vec![... x, y, z, w] => vec![... z, w, x, y]
+    pub fn op_2swap(&mut self) -> bool {
+        let length = self.0.len();
+
+        if length < 4 { return false; }
+
+        let slice = self.0[length - 4..length - 2].to_vec();
+        self.0.splice(length - 4..length - 2, []);
+        self.0.extend(slice);
+        true
+    }
+
+    /// op_code : 115
+    /// stack 최상단 element 가 0 (거짓) 이 아닌 경우, 그 값을 복사하여 최상단에 추가
+    pub fn op_ifdup(&mut self) -> bool {
+        if self.0.is_empty() { return false; }
+        let top = self.0[self.0.len() - 1].clone();
+        if decode_num(&top) !=  0 {
+            self.0.push(top);
+        }
+        true
+    }
+
+    /// op_code : 116
+    /// stack length 값을 stack 최상단에 추가
+    pub fn op_depth(&mut self) -> bool {
+        let depth = encode_num(self.0.len() as i32);
+        self.0.push(depth);
+
+        true
+    }
+
+    /// op_code : 117
+    /// stack 최상단 element 를 버림
+    pub fn op_drop(&mut self) -> bool {
+        if self.0.is_empty() { return false; }
+
+        self.0.pop().unwrap();
+        true
+    }
+
+    /// op_dup  : stack 최상단 element 를 복사하여 stack 위에 저장
+    /// op_code_functions : 118 
+    pub fn op_dup(&mut self) -> bool {
+        let length = self.0.len();
+        if length < 1 { return false; }
+
+        let element = self.0[length - 1].clone();
+        self.0.push(element);
+        true
+    }
+
+    /// op_code : 119
+    /// stack 최상단에서 두번째 element 를 버림
+    pub fn op_nip(&mut self) -> bool {
+        let length = self.0.len();
+        if length < 2 { return false; }
+
+        self.0.remove(length - 2);
+        true
+    }
+
+    /// op_code : 120
+    /// stack 최상단에서 두번째 element 를 복사하여 stack 최상단에 추가
+    pub fn op_over(&mut self) -> bool {
+        let length = self.0.len();
+        if length < 1 { return false; }
+
+        let element = self.0[length - 2].clone();
+        self.0.push(element);
+        true 
+    }
+
+    /// op_code : 121
+    /// stack 최상단 element 를 가져와서 해당 element 숫자 번째 있는 값을 복사하여 최상단에 추가
+    /// vec![... x, y, z, 2] -> vec![... x, y, z, y]
+    pub fn op_pick(&mut self) -> bool {
+        if self.0.is_empty() { return false; }
+
+        let n = decode_num(&self.0.pop().unwrap()) as usize;
+        let length = self.0.len();
+
+        if n >= 0 && length <= n { return false; }
+
+        let element = self.0[length - n].clone();
+        self.0.push(element);
+        true
+    }
+
+    /// op_code : 122
+    /// stack 최상단 element 를 가져와서 해당 element 숫자 번째 있는 값을 이동하여 최상단에 추가
+    /// vec![... x, y, z, 2] -> vec![... x, z, y]
+    pub fn op_roll(&mut self) -> bool {
+        if self.0.is_empty() { return false; }
+
+        let n = decode_num(&self.0.pop().unwrap()) as usize;
+        let length = self.0.len();
+        if n >=  0 && length  <= n { return false; }
+
+        let element = self.0.remove(length - n);
+        self.0.push(element);
+        true
+    }
+
+    /// op_code : 123
+    /// stack 최상단에서 3번째 값을 최상단으로 이동
+    pub fn op_rot(&mut self) -> bool {
+        let length = self.0.len();
+
+        if length < 3 { return false; }
+
+        let element = self.0.remove(length - 3);  
+        self.0.push(element);
+        true
+    }
+
+    /// op_code : 124
+    /// stack 최상단에서 2번째 값을 최상단으로 이동
+    pub fn op_swap(&mut self) -> bool {
+        let length = self.0.len();
+        if length < 2 { return false; }
+
+        let element = self.0.remove(length - 2);
+        self.0.push(element);
+        true
+    }
+
+    /// op_code : 125
+    /// stack 최상단에서 2번째 값을 복사하여 최상단에 추가
+    pub fn op_tuck(&mut self) -> bool {
+        let length = self.0.len();
+        if length < 2 { return false; }
+
+        let element = self.0[length - 2].clone();
+        self.0.push(element);
+        true
+    }
+
+    /// op_code : 130
+    /// stack 최상단 항목의 크기를 byte 단위로 측정하고 그 값을 stack 최상단에 추가
+    /// 예를 들어, stack 최상단 항목이 vec<u8> 일 경우, 
+    /// 해당 vec 길이를 byte 단위로 측정하여 그 값을 stack 에 추가 
+    pub fn op_size(&mut self) -> bool {
+        if self.0.is_empty() { return false; }
+
+        let n = encode_num(self.0.last().unwrap().len() as i32);
+        self.0.push(n);
+        true
+    }
+
+    /// op_code : 135
+    /// stack 최상단 element 와 두번째 element 가 동일하면 1, 다르면 0 을 추가
+    pub fn op_equal(&mut self) -> bool {
+        if self.len() < 2 { return false; }
+
+        let element1 = self.0.pop().unwrap();
+        let element2 = self.0.pop().unwrap();
+
+        if element1 == element2 {
+            self.0.push(encode_num(1));
+        } else {
+            self.0.push(encode_num(0))
+        }
+        true
+    }
+
+    /// op_code : 136
+    /// op_equal 과 동일하게 최상단 element 와 그 아래 element 가 동일한지 비교하지만
+    /// op_equalverify 는 비교 결과 (참, 거짓) 을 stack 에 저장하지 않음.
+    pub fn op_equalverify(&mut self) -> bool {
+        if self.0.len() < 2 { return false; }
+
+        let element1 = self.0.pop().unwrap();
+        let element2 = self.0.pop().unwrap();
+
+        if element1 != element2 {
+            return false;
+        } 
+        true
+    }
+
+    /// op_code : 139
+    /// 최상단 element + 1
+    pub fn op_1add(&mut self) -> bool {
+        if self.0.is_empty() { return false; }
+
+        let element = decode_num(&self.0.pop().unwrap());
+        self.0.push(encode_num(element + 1));
+        true
+    }
+
+    /// op_code : 140
+    /// 최상단 element - 1
+    pub fn op_1sub(&mut self) -> bool {
+        if self.0.is_empty() { return false; }
+
+        let element = decode_num(&self.0.pop().unwrap());
+        self.0.push(encode_num(element - 1));
+        true
+    }
+
+    /// op_code : 143
+    /// 최상단 -element
+    pub fn op_negate(&mut self) -> bool {
+        if self.0.is_empty() { return false; }
+
+        let element = decode_num(&self.0.pop().unwrap());
+        self.0.push(encode_num(-element));
+        true
+    }
+
+    /// op_code : 144
+    pub fn op_abs(&mut self) -> bool {
+        if self.0.is_empty() { return false; }
+
+        let n = decode_num(&self.0.pop().unwrap());
+        if n < 0 {
+            self.0.push(encode_num(-n));
+        } else {
+            self.0.push(encode_num(n));
+        }
+        true
+    }
+
+    /// op_code : 145
+    /// 최상위 element 값이  0  -> 1
+    ///                   그외  -> 0
+    pub fn op_not(&mut self) -> bool {
+        if self.0.is_empty() { return false; }
+
+        let n = decode_num(&self.0.pop().unwrap());
+        if n == 0 {
+            self.0.push(encode_num(1));
+        } else {
+            self.0.push(encode_num(0));
+        }
+        true
+    }
+
+    /// op_code : 146
+    /// not 의 반대 개념
+    /// 최상위 element 값이  0  -> 0
+    ///                   그외  -> 1
+    pub fn op_0notequal(&mut self) -> bool {
+        if self.0.is_empty() { return false; }
+
+        let n = decode_num(&self.0.pop().unwrap());
+        if n == 0 {
+            self.0.push(encode_num(0));
+        } else {
+            self.0.push(encode_num(1));
+        }
+        true
+    }
+
+    /// op_code : 147
+    /// /// 최상위 element pop() + 두번째 element pop()
+    pub fn op_add(&mut self) -> bool {
+        if self.0.len() < 2 { return false; }
+
+        let n1 = decode_num(&self.0.pop().unwrap());
+        let n2 = decode_num(&self.0.pop().unwrap());
+
+        self.0.push(encode_num(n1 + n2));
+        true
+    }
+
+    /// op_code : 148
+    /// 최상위 element pop() - 두번째 element pop()
+    pub fn op_sub(&mut self) -> bool {
+        if self.0.len() < 2 { return false; }
+
+        let n1 = decode_num(&self.0.pop().unwrap());
+        let n2 = decode_num(&self.0.pop().unwrap());
+
+        self.0.push(encode_num(n1 - n2));
+        true
+    }
+
+    /// op_code : 149
+    /// 최상위 element pop() * 두번째 element pop()
+    pub fn op_mul(&mut self) -> bool {
+        if self.0.len() < 2 { return false; }
+
+        let n1 = decode_num(&self.0.pop().unwrap());
+        let n2 = decode_num(&self.0.pop().unwrap());
+
+        self.0.push(encode_num(n1 * n2));
+        true
+    }
+
+    /// op_code : 154
+    /// 최상위 element pop()  두번째 element pop()
+    /// 둘다 참(0이 아닌)  이면 참(1) , 아니면 거짓(0) stack 에 push
+    pub fn op_booland(&mut self) -> bool {
+        if self.0.len() < 2 { return false; }
+
+        let n1 = decode_num(&self.0.pop().unwrap());
+        let n2 = decode_num(&self.0.pop().unwrap());
+
+        if n1 != 0 && n2 != 0 {
+            self.0.push(encode_num(1));
+        } else {
+            self.0.push(encode_num(0));
+        }
+        true
+    }
+
+    /// op_code : 155
+    /// 최상위 element pop()  두번째 element pop()
+    /// 둘 하나라도 참(0이 아닌) 이면 참(1), 아니면 거짓(0) stack 에 push
+    pub fn op_boolor(&mut self) -> bool {
+        if self.0.len() < 2 { return false; }
+
+        let n1 = decode_num(&self.0.pop().unwrap());
+        let n2 = decode_num(&self.0.pop().unwrap());
+
+        if n1 != 0 || n2 != 0 {
+            self.0.push(encode_num(1));
+        } else {
+            self.0.push(encode_num(0));
+        }
+        true
+    }
+
+    /// op_code : 156
+    /// 최상위 element pop()  두번째 element pop()
+    /// 두 수가 같으면 참(1), 아니면 거짓(0) 을 stack 에 push 
+    pub fn op_numequal(&mut self) -> bool {
+        if self.0.len() < 2 { return false; }
+
+        let n1 = decode_num(&self.0.pop().unwrap());
+        let n2 = decode_num(&self.0.pop().unwrap());
+
+        if n1 == n2 {
+            self.0.push(encode_num(1));
+        } else {
+            self.0.push(encode_num(0));
+        }
+        true
+    }
+
+    /// op_code : 157
+    /// 최상위 element pop()  두번째 element pop()
+    /// 두 수가 같으면 참(1), 아니면 거짓(0)  return  (stack push X)
+    /// false 가 ruturn 되는 경우 script 진행 중지
+    pub fn op_numequalverify(&mut self) -> bool {
+        if self.0.len() < 2 { return false; }
+
+        let n1 = decode_num(&self.0.pop().unwrap());
+        let n2 = decode_num(&self.0.pop().unwrap());
+
+        if n1 != n2 {
+            return false;
+        } 
+        true
+    }
+
+    /// op_code : 158
+    /// op_numequal 의 반대
+    /// 두 수가 같으면 거짓(0), 아니면 참(1) 을 stack 에 push 
+    pub fn op_numnotequal(&mut self) -> bool {
+        if self.0.len() < 2 { return false; }
+
+        let n1 = decode_num(&self.0.pop().unwrap());
+        let n2 = decode_num(&self.0.pop().unwrap());
+
+        if n1 == n2 {
+            self.0.push(encode_num(0));
+        } else {
+            self.0.push(encode_num(1));
+        }
+        true
+    }
+
+    /// op_code : 159
+    /// 최상위 < 차상위
+    pub fn op_lessthan(&mut self) -> bool {
+        if self.0.len() < 2 { return false; }
+
+        let n1 = decode_num(&self.0.pop().unwrap());
+        let n2 = decode_num(&self.0.pop().unwrap());
+
+        if n1 < n2 {
+            self.0.push(encode_num(1));
+        } else {
+            self.0.push(encode_num(0));
+        }
+        true
+    }
+
+    /// op_code : 160
+    /// 최상위 > 차상위
+    pub fn op_greaterthan(&mut self) -> bool {
+        if self.0.len() < 2 { return false; }
+
+        let n1 = decode_num(&self.0.pop().unwrap());
+        let n2 = decode_num(&self.0.pop().unwrap());
+
+        if n1 > n2 {
+            self.0.push(encode_num(1));
+        } else {
+            self.0.push(encode_num(0));
+        }
+        true
+    }
+
+    /// op_code : 161
+    /// 최상위 <= 차상위
+    pub fn op_lessthanorequal(&mut self) -> bool {
+        if self.0.len() < 2 { return false; }
+
+        let n1 = decode_num(&self.0.pop().unwrap());
+        let n2 = decode_num(&self.0.pop().unwrap());
+
+        if n1 <= n2 {
+            self.0.push(encode_num(1));
+        } else {
+            self.0.push(encode_num(0));
+        }
+        true
+    }
+
+    /// op_code : 162
+    /// 최상위 >= 차상위
+    pub fn op_greaterthanorequal(&mut self) -> bool {
+        if self.0.len() < 2 { return false; }
+
+        let n1 = decode_num(&self.0.pop().unwrap());
+        let n2 = decode_num(&self.0.pop().unwrap());
+
+        if n1 >= n2 {
+            self.0.push(encode_num(1));
+        } else {
+            self.0.push(encode_num(0));
+        }
+        true
+    }
+
+    /// op_code : 163
+    pub fn op_min(&mut self) -> bool {
+        if self.0.len() < 2 { return false; }
+
+        let n1 = decode_num(&self.0.pop().unwrap());
+        let n2 = decode_num(&self.0.pop().unwrap());
+
+        if n1 < n2 {
+            self.0.push(encode_num(n1));
+        } else {
+            self.0.push(encode_num(n2));
+        }
+        true
+    }
+
+    /// op_code : 164
+    pub fn op_max(&mut self) -> bool {
+        if self.0.len() < 2 { return false; }
+
+        let n1 = decode_num(&self.0.pop().unwrap());
+        let n2 = decode_num(&self.0.pop().unwrap());
+
+        if n1 > n2 {
+            self.0.push(encode_num(n1));
+        } else {
+            self.0.push(encode_num(n2));
+        }
+        true
+    }
+
+    /// op_code : 165
+    /// stack vec![... max, min, x] 의 역순으로 꺼내서 
+    /// min <= x < max  이 성립하면 1, 아니면 0
+    pub fn op_within(&mut self) -> bool {
+        if self.0.len() < 3 { return false; }
+
+        let x = decode_num(&self.0.pop().unwrap());
+        let min = decode_num(&self.0.pop().unwrap());
+        let max = decode_num(&self.0.pop().unwrap());
+
+        if min <= x && x < max  {
+            self.0.push(encode_num(1));
+        } else {
+            self.0.push(encode_num(0));
+        }
+        true
+    }
+
+    /// op_code : 166
+    /// RIPEMD-160은 "RACE Integrity Primitives Evaluation Message Digest"
+    /// RIPEMD-160은 160비트 (20바이트) 길이의 해시를 생성
+    ///  Bitcoin 주소는 공개키를 SHA-256으로 해싱한 다음, 
+    /// 그 결과를 다시 RIPEMD-160으로 해싱하여 생성
+    pub fn op_ripemd160(&mut self) -> bool {
+        if self.0.is_empty() { return false; }
+
+        if let Some(element) = self.0.pop() {
+            let mut hasher = Ripemd160::new();
+            hasher.update(element);
+            let hash = hasher.finalize();
+
+            self.0.push(hash.to_vec());    
+        };
+        true
+    }
+
+    /// op_code : 167
+    pub fn op_sha1(&mut self) -> bool {
+        if self.0.is_empty() { return false; }
+
+        if let Some(element) = self.0.pop() {
+            let mut hasher = Sha1::new();
+            hasher.update(element);
+            let hash = hasher.finalize();
+        
+            self.0.push(hash.to_vec());
+        };
+        true
+    }
+
+    /// op_code : 168
+    pub fn op_sha256(&mut self) -> bool {
+        if self.0.is_empty() { return false; }
+
+        if let Some(element) = self.0.pop() {
+            let mut hasher = Sha256::new();
+            hasher.update(element);
+            let hash = hasher.finalize();
+        
+            self.0.push(hash.to_vec());
+        };
+        true
+    }
+
+    /// op_code : 169
+    /// sha256 + ripemd160
+    pub fn op_hash160(&mut self) -> bool {
+        if self.0.is_empty() { return false; }
+
+        if let Some(element) = self.0.pop() {
+            let mut hasher = Sha256::new();
+            hasher.update(element);
+
+            let mut ripemd = Ripemd160::new();
+
+            // hasher.finalize_reset() 
+            // 현재까지 hashing 된 data 에 댛나 최종 hash 값을 계산하고, hash 상태를 reset
+            // 이렇게 생성된 hash 값은 다시 hasher.update() 의 parameter 전달되어
+            // 다음 round 에 hashing 진행
+            ripemd.update(hasher.finalize_reset());
+            let hash = ripemd.finalize();
+
+            self.0.push(hash.to_vec());
+        }
+        true
+    }
+
+    /// op_code_function: 170 
+    /// sha256 을 2번 진행 => "double hashing"
+    /// Bitcoin 의 transaction hash 와 block hash 에서 사용되는 방식으로
+    /// 더 높은 수준의 보안을 제공
+    pub fn op_hash256(&mut self) -> bool {
+        if self.0.is_empty() { return false; }
+
+        if let Some(element) = self.0.pop() {
+            let mut hasher = Sha256::new();
+            hasher.update(element);
+
+            let re_hasher = hasher.finalize_reset();
+            hasher.update(re_hasher);
+
+            self.0.push(hasher.finalize().to_vec());
+        }
+        true
+    }
+
+    /// op_code : 171
+    /// 생략 (현재 단계에서 구현 어려움)
+    /// script 내에서 현재 위치 이후의 연산자들만 고려하는 특별한 체크포인트를 설정
+    /// 이 연산자는 transaction의 서명을 검증하는 과정에서 사용
+    /// script 가 이 연산자를 만나면, 이 연산자 이후의 부분만이 서명 hash의 생성에 사용됩니다.
+    // pub fn op_codeseparator(stack: &mut Stack) -> bool {
+    //     true
+    // }
+
+
+    /// op_code : 172
+    /// stack 최상단 2 개의 element 를 각각 공개키와 서명으로 사용하여 taansaction 서명을 검증
+    /// 서명이 공개키와 일치하는지를 확인 후 , 검증 결과(true: 1, flase: 00)를 stack 에 다시 push 
+    pub fn op_checksig(&mut self, _z: u8) -> bool {
+        info!("op_checksig is not implemented");
+        true
+    }
+
+    /// op_code : 173
+    /// checksig 와 유사하지만, 검증에 실패할 경우 return false 로 실행 중단 
+    /// 성공할 경우 true (정상 실행 유지) 반환 (stack push X)
+    pub fn op_checksigverify(&mut self, _z:u8) -> bool {
+        info!("op_checksigverify is not implemented");
+        true
+    }
+
+    /// op_code : 174
+    /// 다수의 서명(multisig)를 검증
+    /// stack 가장 위의 element은 공개키 개수를, 그 아래 element 는 서명의 개수
+    /// 모든 서명이 검증에 성공하면 1(true), 그렇지 않으면 0(false) 을 stack 에 push
+    pub fn op_checkmultisig(&mut self, _z: u8) -> bool {
+        info!("op_checkmultisig is not implemented");
+        true
+    }
+
+    /// op_code : 175
+    /// op_checkmultisig 에서 stack push 없이 검증이 실패하면 false 를 return 하여 실행 중단
+    pub fn op_checkmultisigverify(&mut self, _z: u8) -> bool {
+        info!("op_checkmultisigverify is not implemented");
+        true
+    }
+
+    /// op_code : 177
+    /// OP_CHECKLOCKTIMEVERIFY (CLTV) 특정 시간 (locktime) 이후 bitcoin 사용할 수 있게 함. 
+    /// 추후 코드 검증 필요
+    pub fn op_checklocktimeverify(&mut self, locktime: u32, sequence: u32) -> bool {
+        if sequence == 0xffffffff { return false; }
+        if self.0.is_empty() { return false; }
+
+        if let Some(element) = self.0.last() {
+            let n = decode_num(element);
+
+            if n < 0 { return false; }
+
+            // 500,000,000 의 의미
+            // locktime <= 500,000,000 이면 block 높이
+            // locktime < 500,000,000 이면 Unix Epoch Time 으로 해석됨,
+            // stack 에서 가져온 값이 앞의 locktime 의 해석 조건과 동일해야 하므로 
+            // 아래 조건이 충족되면 false return 
+            //
+            // 500,000,000 초는 1970년 00:00:00 으로 부터 약 15.85년 으로 
+            // 이값을 초과하는 locktime 은 Unix 시간으로 해석되며
+            // 그 이하는 block 의 높이로 해석되도록 Bitcoin protocol 상 설계되어 있음.
+            if n < 500_000_000 && locktime > 500_000_000 { return false; }
+
+            // 해당 조건은 아직 transaction 이 실행 될 시점 또는 블록 높이에 도달하지 않았기 때문에
+            // 사용될 수 없음을 만드는 코드 조각.
+            if locktime < n as u32 { return false; }
+        }
+        true
+    }
+
+    /// op_code : 178
+    /// OP_CHECKSEQUENCEVERIFY (CSV) 는 sequence 번호가 지나야 bitcoin 을 사용할 수 있게 함.
+    /// (해당 transaction output 을 해당 시간 기간동안 잠그는데 사용) 
+    /// 추후 코드 검증 필요
+    pub fn op_checksequenceverify(&mut self, version: u32, sequence: u32) -> bool {
+
+        // sequence field 최상위 bit 가 1 인 경우 기존의 상대적인 시간 잠금
+        // (block 이 채굴된 이후 경과된 시간)이 무시되고,
+        // 전통적인 nLockTime (특정 block 높이 또는 시간) 에 의해 잠겨짐 
+        // 이는 Bitcoin protocol 상 설정되어 있음
+        if sequence & (1 << 31) == (1 << 31) { return false; }
+        if self.0.is_empty() { return false; }
+
+        if let Some(element) = self.0.last() {
+            let n = decode_num(element);
+
+            if n < 0 { return false; }
+            let n_u32 = n as u32;
+
+            if n_u32 & (1 << 31) == (1 << 31) { 
+
+                // 상대적인 locktime 설정은 version 2 이후부터 사용 가능하므로
+                // 이것은 Bitcoin Improvement Proposal (BIP) 68과 112에 의해 도입된 변경 사항임. 
+                // BIP 68은 nSequence 필드에 상대적인 블록 높이 또는 시간을 지정할 수 있게 하였고, 
+                // BIP 112는 OP_CHECKSEQUENCEVERIFY (CSV)를 도입하여 이를 활용할 수 있게 하였음. 
+                // 이들 BIP는 Bitcoin의 트랜잭션 버전 2에서 도입됨.
+                if version < 2 { 
+                    return false; 
+
+                // 앞에서 최상의 bit 에 대한 검사 처리를 했는데, 여기서 또 해야 하는지..
+                // 확인 가능 자료가 없어서 그대로 둠
+                } else if sequence & (1 << 31) == (1 << 31) {
+                    return false;
+
+                // BIP 68에서 도입된 상대적인 잠금 시간 기능은 nSequence 필드의 비트를 
+                // 특정한 방식으로 해석하도록 변경하였으며, 이는 nSequence 필드의 22번째 비트는 
+                // 이 필드의 나머지 부분이 블록 높이를 기준으로 한 상대적인 잠금 시간을 나타내는지 
+                // (22번째 비트가 0인 경우), 아니면 초 단위로 표현된 시간을 기준으로 한 
+                // 상대적인 잠금 시간을 나타내는지 (22번째 비트가 1인 경우)를 결정.    
+                } else if n_u32 & (1 << 22) != sequence & (1 << 22) {
+                    return false;
+                } else if n_u32 & 0xffff > sequence &  0xffff {
+                    return false;
+                }
+            }
+        }
+
+        true
+    }
+}
 
 impl Deref for Stack {
     type Target = Vec<Vec<u8>>;
@@ -33,15 +1095,15 @@ impl DerefMut for Stack {
 pub fn encode_num(num: i32) -> Vec<u8> {
     if num == 0 { return vec![] }
 
-    let abs_num = num.abs();
+    let mut abs_num = num.abs();
     let negative = num < 0;
     let mut result = vec![];
 
-    let mut num_clone = num.clone();
+    let num_clone = num.clone();
     // 뒤 8bits 부터 저장
     while num_clone != 0 {
         result.push((num_clone & 0xff) as u8);
-        num_clone >>= 8;
+        abs_num >>= 8;
     }
 
     // 음수(1000 0000) / 양수(0000 00)의 표현을 위해 1byte 를 더 추가하는건가???
@@ -56,7 +1118,7 @@ pub fn encode_num(num: i32) -> Vec<u8> {
     //  마지막 바이트의 상위 비트를 설정하여 음수임을 나타냄 (????)
     } else if negative {
         let last_index = result.len() - 1;
-        result[last_index] != 0x80;
+        result[last_index] |= 0x80;
     }
     result
 }
@@ -92,1057 +1154,6 @@ pub fn decode_num(element:&Vec<u8>) -> i32 {
 }
 
 
-/// OP-code : 0  
-pub fn op_0(stack: &mut Stack) -> bool {
-    stack.push(encode_num(0));
-    true
-}
-
-/// op_code : 79
-pub fn op_1negate(stack: &mut Stack) -> bool {
-    stack.push(encode_num(-1));
-    true
-}
-
-/// op_code : 81
-pub fn op_1(stack: &mut Stack) -> bool {
-    stack.push(encode_num(1));
-    true
-}
-
-/// op_code : 82
-pub fn op_2(stack: &mut Stack) -> bool {
-    stack.push(encode_num(2));
-    true
-}
-
-/// op_code : 83
-pub fn op_3(stack: &mut Stack) -> bool {
-    stack.push(encode_num(3));
-    true
-}
-
-/// op_code : 84
-pub fn op_4(stack: &mut Stack) -> bool {
-    stack.push(encode_num(4));
-    true
-}
-
-/// op_code : 85
-pub fn op_5(stack: &mut Stack) -> bool {
-    stack.push(encode_num(5));
-    true
-}
-
-/// op_code : 86
-pub fn op_6(stack: &mut Stack) -> bool {
-    stack.push(encode_num(6));
-    true
-}
-
-/// op_code : 87
-pub fn op_7(stack: &mut Stack) -> bool {
-    stack.push(encode_num(7));
-    true
-}
-
-/// op_code : 88
-pub fn op_8(stack: &mut Stack) -> bool {
-    stack.push(encode_num(8));
-    true
-}
-
-/// op_code : 89
-pub fn op_9(stack: &mut Stack) -> bool {
-    stack.push(encode_num(9));
-    true
-}
-
-/// op_code : 90
-pub fn op_10(stack: &mut Stack) -> bool {
-    stack.push(encode_num(10));
-    true
-}
-
-
-/// op_code : 91
-pub fn op_11(stack: &mut Stack) -> bool {
-    stack.push(encode_num(11));
-    true
-}
-
-/// op_code : 92
-pub fn op_12(stack: &mut Stack) -> bool {
-    stack.push(encode_num(12));
-    true
-}
-
-/// op_code : 93
-pub fn op_13(stack: &mut Stack) -> bool {
-    stack.push(encode_num(13));
-    true
-}
-
-/// op_code : 94
-pub fn op_14(stack: &mut Stack) -> bool {
-    stack.push(encode_num(14));
-    true
-}
-
-/// op_code : 95
-pub fn op_15(stack: &mut Stack) -> bool {
-    stack.push(encode_num(15));
-    true
-}
-
-/// op_code : 96
-pub fn op_16(stack: &mut Stack) -> bool {
-    stack.push(encode_num(16));
-    true
-}
-
-/// op_code : 97
-pub fn op_nop(stack: &mut Stack) -> bool {
-    true
-}
-
-/// op_code : 99
-/// 일반 programming language 에서 if 와 유사한 역할
-/// 사용의 예
-/// -----------------------------------------------------
-/// <condition> OP_IF
-///     <code to be executed if condition is true>
-/// OP_ENDIF
-/// -----------------------------------------------------
-/// stack 맨 위 요소(<condition>)를 참(일반적으로 0이 아닌) 또는 거짓(일반적으로 0) 으로 해석
-/// 그 결과에 따라 script 실행 흐름을 제어
-pub fn op_if(stack: &mut Stack, items: &mut Vec<u8>) -> bool {
-    if stack.is_empty() { return false; }
-
-    let mut true_items = Vec::<u8>::new();
-    let mut false_items = Vec::<u8>::new();
-    let mut current_array = &mut true_items;
-
-    let mut found = false;
-    let mut num_endifs_needed = 1usize;
-
-    while !items.is_empty() {
-        let item = items.remove(0);
-        match item {
-            99 | 100 => {
-                num_endifs_needed += 1;
-                current_array.push(item);
-            },
-            103 if num_endifs_needed == 1 => {
-                current_array = &mut false_items;
-            },
-            104 => {
-                if num_endifs_needed == 1 {
-                    found = true;
-                    break;
-                } else {
-                    num_endifs_needed -= 1;
-                    current_array.push(item);    
-                }
-            },
-            _ => { current_array.push(item) }
-        }
-    }
-    
-    if !found { return false }
-    
-    let mut element = stack.pop().unwrap();
-
-    if decode_num(&element) == 0 {
-        items.splice(0..0, false_items);
-    } else {
-        items.splice(0..0, true_items);
-    }
-
-    true
-}
-
-/// op_code : 100
-/// op_if 의 반대로 <condition> 이 거짓(0) 일때 조건을 수행
-pub fn op_notif(stack: &mut Stack, items: &mut Vec<u8>) -> bool {
-    if stack.is_empty() { return false; }
-
-    let mut true_items = Vec::<u8>::new();
-    let mut false_items = Vec::<u8>::new();
-    let mut current_array = &mut true_items;
-    let mut found = false;
-    let mut num_endifs_needed = 1i32;
-
-    while !items.is_empty() {
-        let item = items.remove(0);
-
-        match item {
-            99 | 100 => {
-                num_endifs_needed += 1;
-                current_array.push(item);
-            },
-            103 if num_endifs_needed == 1 => {
-                current_array = &mut false_items;
-            },
-            104 => {
-                if num_endifs_needed == 1 {
-                    found = true;
-                    break;
-                } else {
-                    num_endifs_needed -= 1;
-                    current_array.push(item);
-                }
-            },
-            _ => {
-                current_array.push(item);
-            },
-        }
-    }
-    if !found { return false; }
-
-    let mut element = stack.pop().unwrap();
-    if decode_num(&element) == 0 {
-        items.splice(0..0, true_items);
-    } else {
-        items.splice(0..0, false_items);
-    }
-    true
-}
-
-/// op_code : 105
-/// stack 최상단 element 가 true (0이 아닌) 지를 확인
-/// 해당 element  0이 아니라면 script 를 계속 진행
-///               0이면 script 실행을 즉시 중지
-/// 위 조건에 따라 op_verify  는 script 가 어떤 조건을 만족하는지 확인하는데 사용
-/// ex. 특정 signiture 가 올바른지 또는 어떤 계산의 결과가 예상하는 값인지를 확인
-pub fn op_verify(stack: &mut Stack) -> bool {
-    if stack.is_empty() { return false; }
-
-    let mut element = stack.pop().unwrap();
-    if decode_num(&element) == 0 {
-        return false;
-    }
-    true
-}
-
-/// op_code : 106
-/// 거래의 유효성을 '무효' 로 설정하여 거래가 blockchain 에 포함되지 않도록함
-/// 주로 'data carrier' 로 사용됨. 
-///   -> Bitcoin context 에서 transaction 의 일부로 data 를 blockchain 에 저장하는 기능을 의미
-///      op_return 연산자를 통해 bitcoin transaction 에 임의의 데이터를 포함시킬 수 있는 방법을 제공
-///      이 데이터는 거래의 유효성에 영향을 주지 않지만, 외부 응용 프로그램에서 조회하거나 사용할 수 있음
-///      예를 들어, 시간 증명, 메타데이터 저장, 디지털 자산 인증, 메시지 등의 목적으로 사용할 수 있음
-/// 
-/// OP_RETURN 이 script 에 나타나면 해당 script 는 즉시 중단됨.
-/// 따라서 OP_RETURN 이후에 나타나는 data 는 script 의 실행에 영항을 주지 않고 무시됨.
-/// 거래 자체는 블록체인에 포함되지 않으나, OP_RETURN 다음에 오는 데이터는 
-/// blockchain 의 transaction pool에 일시적으로 저장
-/// 외부의 application 들이 이 data 를 읽을 수 있음.
-pub fn op_return(stack: &mut Stack) -> bool {
-    false
-}
-
-/// op_code : 107
-/// main stack 최상위 element 를 꺼내서 alt_stack 으로 이동
-/// alt_stack - main stack 의 값을 일시적으로 제거하거나 나중에 사용할 값을 저장하기 위해 사용
-pub fn op_totaltstack(stack: &mut Stack, alt_stack: &mut Stack) -> bool {
-    if stack.is_empty() { return false; }
-
-    if let Some(val) = stack.pop() {
-        alt_stack.push(val);
-    };
-    true
-}
-
-/// op_code : 108
-/// alt_stack 최상위 element 를 꺼내서 main stack 으로 이동
-pub fn op_fromaltstack(stack: &mut Stack, alt_stack: &mut Stack) -> bool {
-    if alt_stack.is_empty() { return false; }
-    
-    if let Some(val) = alt_stack.pop() {
-        stack.push(val);
-    }
-    true
-}
-
-/// op_code : 109
-/// main stack 최상위 2개의 element 를 drop
-/// transaction 유효성 검사, output 잠금 해제 등을 위해 사용
-pub fn op_2drop(stack: &mut Stack) -> bool {
-    let length = stack.len();
-    
-    if length < 2 { return false; }
-    
-    stack.pop().unwrap();
-    stack.pop().unwrap();
-    true
-}
-
-/// op_code : 110
-/// main stack 최상단 2 개 element 를 복제하여 동일한 순서대로 stack 에 추가
-pub fn op_2dup(stack: &mut Stack) -> bool {
-    let length = stack.len();
-
-    if length < 2 { return false; }
-
-    let end_elements = stack
-        .iter()
-        .rev()
-        .take(2)
-        .rev()
-        .cloned()
-        .collect::<Vec<_>>();
-
-    stack.extend(end_elements);
-
-    true
-}
-
-/// op_code : 111
-/// main stack 최상단 3 개 element 를 복제하여 동일한 순서대로 stack 에 추가
-pub fn op_3dup(stack: &mut Stack) -> bool {
-    let length = stack.len();
-
-    if length < 3 { return false; }
-
-    let end_elements = stack
-        .iter()
-        .rev()
-        .take(3)
-        .rev()
-        .cloned()
-        .collect::<Vec<_>>();
-
-    stack.extend(end_elements);
-
-    true
-}
-
-/// op_code : 112
-/// stack 두 번째 쌍의 두 항목을 복사하여 stack 의 맨 위로 가져옴
-/// vec![... x, y, z, w] => vec![... x, y, z, w, x, y]
-pub fn op_2over(stack: &mut Stack) -> bool {
-    let length = stack.len();
-
-    if length < 4 { return false; }
-    let stack_slice = stack[length - 4.. length - 2].to_vec();
-    stack.extend(stack_slice);
-    true
-}
-
-/// op_code : 113
-/// stack 세 번째 쌍의 두 항목을 제거하고 stack 의 맨 위로 이동
-/// vec![... x, y, z, w, a, b] => vec![... z, w, a, b, x, y]
-pub fn op_2rot(stack: &mut Stack) -> bool {
-    let length = stack.len();
-
-    if length < 6 { return false; }
-
-    let slice = stack[length - 6..length - 4].to_vec();
-    stack.splice(length - 6..length - 4, []);
-    stack.extend(slice);
-    true
-}
-
-/// op_code : 114
-/// stack 상위 두 쌍의 항목를 서로 바꿈
-/// vec![... x, y, z, w] => vec![... z, w, x, y]
-pub fn op_2swap(stack: &mut Stack) -> bool {
-    let length = stack.len();
-
-    if length < 4 { return false; }
-
-    let slice = stack[length - 4..length - 2].to_vec();
-    stack.splice(length - 4..length - 2, []);
-    stack.extend(slice);
-    true
-}
-
-/// op_code : 115
-/// stack 최상단 element 가 0 (거짓) 이 아닌 경우, 그 값을 복사하여 최상단에 추가
-pub fn op_ifdup(stack: &mut Stack) -> bool {
-    if stack.is_empty() { return false; }
-    let top = stack[stack.len() - 1].clone();
-    if decode_num(&top) !=  0 {
-        stack.push(top);
-    }
-    true
-}
-
-/// op_code : 116
-/// stack length 값을 stack 최상단에 추가
-pub fn op_depth(stack: &mut Stack) -> bool {
-    let depth = encode_num(stack.len() as i32);
-    stack.push(depth);
-
-    true
-}
-
-/// op_code : 117
-/// stack 최상단 element 를 버림
-pub fn op_drop(stack: &mut Stack) -> bool {
-    if stack.is_empty() { return false; }
-
-    stack.pop().unwrap();
-    true
-}
-
-/// op_dup  : stack 최상단 element 를 복사하여 stack 위에 저장
-/// op_code_functions : 118 
-pub fn op_dup(stack: &mut Stack) -> bool {
-    let length = stack.len();
-    if length < 1 { return false; }
-    
-    let element = stack[length - 1].clone();
-    stack.push(element);
-    true
-}
-
-/// op_code : 119
-/// stack 최상단에서 두번째 element 를 버림
-pub fn op_nip(stack: &mut Stack) -> bool {
-    let length = stack.len();
-    if length < 2 { return false; }
-
-    stack.remove(length - 2);
-    true
-}
-
-/// op_code : 120
-/// stack 최상단에서 두번째 element 를 복사하여 stack 최상단에 추가
-pub fn op_over(stack: &mut Stack) -> bool {
-    let length = stack.len();
-    if length < 1 { return false; }
-
-    let element = stack[length - 2].clone();
-    stack.push(element);
-    true 
-}
-
-/// op_code : 121
-/// stack 최상단 element 를 가져와서 해당 element 숫자 번째 있는 값을 복사하여 최상단에 추가
-/// vec![... x, y, z, 2] -> vec![... x, y, z, y]
-pub fn op_pick(stack: &mut Stack) -> bool {
-    if stack.is_empty() { return false; }
-
-    let n = decode_num(&stack.pop().unwrap()) as usize;
-    let length = stack.len();
-
-    if n >= 0 && length <= n { return false; }
-
-    let element = stack[length - n].clone();
-    stack.push(element);
-    true
-}
-
-/// op_code : 122
-/// stack 최상단 element 를 가져와서 해당 element 숫자 번째 있는 값을 이동하여 최상단에 추가
-/// vec![... x, y, z, 2] -> vec![... x, z, y]
-pub fn op_roll(stack: &mut Stack) -> bool {
-    if stack.is_empty() { return false; }
-
-    let n = decode_num(&stack.pop().unwrap()) as usize;
-    let length = stack.len();
-    if n >=  0 && length  <= n { return false; }
-    
-    let element = stack.remove(length - n);
-    stack.push(element);
-    true
-}
-
-/// op_code : 123
-/// stack 최상단에서 3번째 값을 최상단으로 이동
-pub fn op_rot(stack: &mut Stack) -> bool {
-    let length = stack.len();
-
-    if length < 3 { return false; }
-    
-    let element = stack.remove(length - 3);  
-    stack.push(element);
-    true
-}
-
-/// op_code : 124
-/// stack 최상단에서 2번째 값을 최상단으로 이동
-pub fn op_swap(stack: &mut Stack) -> bool {
-    let length = stack.len();
-    if length < 2 { return false; }
-
-    let element = stack.remove(length - 2);
-    stack.push(element);
-    true
-}
-
-/// op_code : 125
-/// stack 최상단에서 2번째 값을 복사하여 최상단에 추가
-pub fn op_tuck(stack: &mut Stack) -> bool {
-    let length = stack.len();
-    if length < 2 { return false; }
-
-    let element = stack[length - 2].clone();
-    stack.push(element);
-    true
-}
-
-/// op_code : 130
-/// stack 최상단 항목의 크기를 byte 단위로 측정하고 그 값을 stack 최상단에 추가
-/// 예를 들어, stack 최상단 항목이 vec<u8> 일 경우, 
-/// 해당 vec 길이를 byte 단위로 측정하여 그 값을 stack 에 추가 
-pub fn op_size(stack: &mut Stack) -> bool {
-    if stack.is_empty() { return false; }
-
-    let n = encode_num(stack.last().unwrap().len() as i32);
-    stack.push(n);
-    true
-}
-
-/// op_code : 135
-/// stack 최상단 element 와 두번째 element 가 동일하면 1, 다르면 0 을 추가
-pub fn op_equal(stack: &mut Stack) -> bool {
-    if stack.len() < 2 { return false; }
-
-    let element1 = stack.pop().unwrap();
-    let element2 = stack.pop().unwrap();
-
-    if element1 == element2 {
-        stack.push(encode_num(1));
-    } else {
-        stack.push(encode_num(0))
-    }
-    true
-}
-
-/// op_code : 136
-/// op_equal 과 동일하게 최상단 element 와 그 아래 element 가 동일한지 비교하지만
-/// op_equalverify 는 비교 결과 (참, 거짓) 을 stack 에 저장하지 않음.
-pub fn op_equlverify(stack: &mut Stack) -> bool {
-    if stack.len() < 2 { return false; }
-
-    let element1 = stack.pop().unwrap();
-    let element2 = stack.pop().unwrap();
-
-    if element1 != element2 {
-        return false;
-    } 
-    true
-}
-
-/// op_code : 139
-/// 최상단 element + 1
-pub fn op_1add(stack: &mut Stack) -> bool {
-    if stack.is_empty() { return false; }
-
-    let element = decode_num(&stack.pop().unwrap());
-    stack.push(encode_num(element + 1));
-    true
-}
-
-/// op_code : 140
-/// 최상단 element - 1
-pub fn op_1sub(stack: &mut Stack) -> bool {
-    if stack.is_empty() { return false; }
-
-    let element = decode_num(&stack.pop().unwrap());
-    stack.push(encode_num(element - 1));
-    true
-}
-
-/// op_code : 143
-/// 최상단 -element
-pub fn op_negate(stack: &mut Stack) -> bool {
-    if stack.is_empty() { return false; }
-    
-    let element = decode_num(&stack.pop().unwrap());
-    stack.push(encode_num(-element));
-    true
-}
-
-/// op_code : 144
-pub fn op_abs(stack: &mut Stack) -> bool {
-    if stack.is_empty() { return false; }
-
-    let n = decode_num(&stack.pop().unwrap());
-    if n < 0 {
-        stack.push(encode_num(-n));
-    } else {
-        stack.push(encode_num(n));
-    }
-    true
-}
-
-/// op_code : 145
-/// 최상위 element 값이  0  -> 1
-///                   그외  -> 0
-pub fn op_not(stack: &mut Stack) -> bool {
-    if stack.is_empty() { return false; }
-
-    let n = decode_num(&stack.pop().unwrap());
-    if n == 0 {
-        stack.push(encode_num(1));
-    } else {
-        stack.push(encode_num(0));
-    }
-    true
-}
-
-/// op_code : 146
-/// not 의 반대 개념
-/// 최상위 element 값이  0  -> 0
-///                   그외  -> 1
-pub fn op_0notequal(stack: &mut Stack) -> bool {
-    if stack.is_empty() { return false; }
-
-    let n = decode_num(&stack.pop().unwrap());
-    if n == 0 {
-        stack.push(encode_num(0));
-    } else {
-        stack.push(encode_num(1));
-    }
-    true
-}
-
-/// op_code : 147
-/// /// 최상위 element pop() + 두번째 element pop()
-pub fn op_add(stack: &mut Stack) -> bool {
-    if stack.len() < 2 { return false; }
-
-    let n1 = decode_num(&stack.pop().unwrap());
-    let n2 = decode_num(&stack.pop().unwrap());
-
-    stack.push(encode_num(n1 + n2));
-    true
-}
-
-/// op_code : 148
-/// 최상위 element pop() - 두번째 element pop()
-pub fn op_sub(stack: &mut Stack) -> bool {
-    if stack.len() < 2 { return false; }
-
-    let n1 = decode_num(&stack.pop().unwrap());
-    let n2 = decode_num(&stack.pop().unwrap());
-
-    stack.push(encode_num(n1 - n2));
-    true
-}
-
-/// op_code : 149
-/// 최상위 element pop() * 두번째 element pop()
-pub fn op_mul(stack: &mut Stack) -> bool {
-    if stack.len() < 2 { return false; }
-
-    let n1 = decode_num(&stack.pop().unwrap());
-    let n2 = decode_num(&stack.pop().unwrap());
-
-    stack.push(encode_num(n1 * n2));
-    true
-}
-
-/// op_code : 154
-/// 최상위 element pop()  두번째 element pop()
-/// 둘다 참(0이 아닌)  이면 참(1) , 아니면 거짓(0) stack 에 push
-pub fn op_booland(stack: &mut Stack) -> bool {
-    if stack.len() < 2 { return false; }
-
-    let n1 = decode_num(&stack.pop().unwrap());
-    let n2 = decode_num(&stack.pop().unwrap());
-
-    if n1 != 0 && n2 != 0 {
-        stack.push(encode_num(1));
-    } else {
-        stack.push(encode_num(0));
-    }
-    true
-}
-
-/// op_code : 155
-/// 최상위 element pop()  두번째 element pop()
-/// 둘 하나라도 참(0이 아닌) 이면 참(1), 아니면 거짓(0) stack 에 push
-pub fn op_boolor(stack: &mut Stack) -> bool {
-    if stack.len() < 2 { return false; }
-
-    let n1 = decode_num(&stack.pop().unwrap());
-    let n2 = decode_num(&stack.pop().unwrap());
-
-    if n1 != 0 || n2 != 0 {
-        stack.push(encode_num(1));
-    } else {
-        stack.push(encode_num(0));
-    }
-    true
-}
-
-/// op_code : 156
-/// 최상위 element pop()  두번째 element pop()
-/// 두 수가 같으면 참(1), 아니면 거짓(0) 을 stack 에 push 
-pub fn op_numequal(stack: &mut Stack) -> bool {
-    if stack.len() < 2 { return false; }
-
-    let n1 = decode_num(&stack.pop().unwrap());
-    let n2 = decode_num(&stack.pop().unwrap());
-
-    if n1 == n2 {
-        stack.push(encode_num(1));
-    } else {
-        stack.push(encode_num(0));
-    }
-    true
-}
-
-/// op_code : 157
-/// 최상위 element pop()  두번째 element pop()
-/// 두 수가 같으면 참(1), 아니면 거짓(0)  return  (stack push X)
-/// false 가 ruturn 되는 경우 script 진행 중지
-pub fn op_numequalverify(stack: &mut Stack) -> bool {
-    if stack.len() < 2 { return false; }
-
-    let n1 = decode_num(&stack.pop().unwrap());
-    let n2 = decode_num(&stack.pop().unwrap());
-
-    if n1 != n2 {
-        return false;
-    } 
-    true
-}
-
-/// op_code : 158
-/// op_numequal 의 반대
-/// 두 수가 같으면 거짓(0), 아니면 참(1) 을 stack 에 push 
-pub fn op_numnotequal(stack: &mut Stack) -> bool {
-    if stack.len() < 2 { return false; }
-
-    let n1 = decode_num(&stack.pop().unwrap());
-    let n2 = decode_num(&stack.pop().unwrap());
-
-    if n1 == n2 {
-        stack.push(encode_num(0));
-    } else {
-        stack.push(encode_num(1));
-    }
-    true
-}
-
-/// op_code : 159
-/// 최상위 < 차상위
-pub fn op_lessthan(stack: &mut Stack) -> bool {
-    if stack.len() < 2 { return false; }
-    
-    let n1 = decode_num(&stack.pop().unwrap());
-    let n2 = decode_num(&stack.pop().unwrap());
-
-    if n1 < n2 {
-        stack.push(encode_num(1));
-    } else {
-        stack.push(encode_num(0));
-    }
-    true
-}
-
-/// op_code : 160
-/// 최상위 > 차상위
-pub fn op_greaterthan(stack: &mut Stack) -> bool {
-    if stack.len() < 2 { return false; }
-    
-    let n1 = decode_num(&stack.pop().unwrap());
-    let n2 = decode_num(&stack.pop().unwrap());
-
-    if n1 > n2 {
-        stack.push(encode_num(1));
-    } else {
-        stack.push(encode_num(0));
-    }
-    true
-}
-
-/// op_code : 161
-/// 최상위 <= 차상위
-pub fn op_lessthanorequal(stack: &mut Stack) -> bool {
-    if stack.len() < 2 { return false; }
-    
-    let n1 = decode_num(&stack.pop().unwrap());
-    let n2 = decode_num(&stack.pop().unwrap());
-
-    if n1 <= n2 {
-        stack.push(encode_num(1));
-    } else {
-        stack.push(encode_num(0));
-    }
-    true
-}
-
-/// op_code : 162
-/// 최상위 >= 차상위
-pub fn op_greaterthanorequal(stack: &mut Stack) -> bool {
-    if stack.len() < 2 { return false; }
-    
-    let n1 = decode_num(&stack.pop().unwrap());
-    let n2 = decode_num(&stack.pop().unwrap());
-
-    if n1 >= n2 {
-        stack.push(encode_num(1));
-    } else {
-        stack.push(encode_num(0));
-    }
-    true
-}
-
-/// op_code : 163
-pub fn op_min(stack: &mut Stack) -> bool {
-    if stack.len() < 2 { return false; }
-        
-    let n1 = decode_num(&stack.pop().unwrap());
-    let n2 = decode_num(&stack.pop().unwrap());
-
-    if n1 < n2 {
-        stack.push(encode_num(n1));
-    } else {
-        stack.push(encode_num(n2));
-    }
-    true
-}
-
-/// op_code : 164
-pub fn op_max(stack: &mut Stack) -> bool {
-    if stack.len() < 2 { return false; }
-        
-    let n1 = decode_num(&stack.pop().unwrap());
-    let n2 = decode_num(&stack.pop().unwrap());
-
-    if n1 > n2 {
-        stack.push(encode_num(n1));
-    } else {
-        stack.push(encode_num(n2));
-    }
-    true
-}
-
-/// op_code : 165
-/// stack vec![... max, min, x] 의 역순으로 꺼내서 
-/// min <= x < max  이 성립하면 1, 아니면 0
-pub fn op_within(stack: &mut Stack) -> bool {
-    if stack.len() < 3 { return false; }
-            
-    let x = decode_num(&stack.pop().unwrap());
-    let min = decode_num(&stack.pop().unwrap());
-    let max = decode_num(&stack.pop().unwrap());
-
-    if min <= x && x < max  {
-        stack.push(encode_num(1));
-    } else {
-        stack.push(encode_num(0));
-    }
-    true
-}
-
-/// op_code : 166
-/// RIPEMD-160은 "RACE Integrity Primitives Evaluation Message Digest"
-/// RIPEMD-160은 160비트 (20바이트) 길이의 해시를 생성
-///  Bitcoin 주소는 공개키를 SHA-256으로 해싱한 다음, 
-/// 그 결과를 다시 RIPEMD-160으로 해싱하여 생성
-pub fn op_ripemd160(stack: &mut Stack) -> bool {
-    if stack.is_empty() { return false; }
-
-    if let Some(element) = stack.pop() {
-        let mut hasher = Ripemd160::new();
-        hasher.update(element);
-        let hash = hasher.finalize();
-        
-        stack.push(hash.to_vec());    
-    };
-    true
-}
-
-/// op_code : 167
-pub fn op_sha1(stack: &mut Stack) -> bool {
-    if stack.is_empty() { return false; }
-
-    if let Some(element) = stack.pop() {
-        let mut hasher = Sha1::new();
-        hasher.update(element);
-        let hash = hasher.finalize();
-    
-        stack.push(hash.to_vec());
-    };
-    true
-}
-
-/// op_code : 168
-pub fn op_sha256(stack: &mut Stack) -> bool {
-    if stack.is_empty() { return false; }
-
-    if let Some(element) = stack.pop() {
-        let mut hasher = Sha256::new();
-        hasher.update(element);
-        let hash = hasher.finalize();
-    
-        stack.push(hash.to_vec());
-    };
-    true
-}
-
-/// op_code : 169
-/// sha256 + ripemd160
-pub fn op_hash160(stack: &mut Stack) -> bool {
-    if stack.is_empty() { return false; }
-
-    if let Some(element) = stack.pop() {
-        let mut hasher = Sha256::new();
-        hasher.update(element);
-        
-        let mut ripemd = Ripemd160::new();
-
-        // hasher.finalize_reset() 
-        // 현재까지 hashing 된 data 에 댛나 최종 hash 값을 계산하고, hash 상태를 reset
-        // 이렇게 생성된 hash 값은 다시 hasher.update() 의 parameter 전달되어
-        // 다음 round 에 hashing 진행
-        ripemd.update(hasher.finalize_reset());
-        let hash = ripemd.finalize();
-
-        stack.push(hash.to_vec());
-    }
-    true
-}
-
-/// op_code_function: 170 
-/// sha256 을 2번 진행 => "double hashing"
-/// Bitcoin 의 transaction hash 와 block hash 에서 사용되는 방식으로
-/// 더 높은 수준의 보안을 제공
-pub fn po_hash256(stack: &mut Stack) -> bool {
-    if stack.is_empty() { return false; }
-
-    if let Some(element) = stack.pop() {
-        let mut hasher = Sha256::new();
-        hasher.update(element);
-
-        let re_hasher = hasher.finalize_reset();
-        hasher.update(re_hasher);
-            
-        stack.push(hasher.finalize().to_vec());
-    }
-    true
-}
-
-/// op_code : 171
-/// 생략 (현재 단계에서 구현 어려움)
-/// script 내에서 현재 위치 이후의 연산자들만 고려하는 특별한 체크포인트를 설정
-/// 이 연산자는 transaction의 서명을 검증하는 과정에서 사용
-/// script 가 이 연산자를 만나면, 이 연산자 이후의 부분만이 서명 hash의 생성에 사용됩니다.
-// pub fn op_codeseparator(stack: &mut Stack, z) -> bool {
-    
-//     true
-// }
-
-
-/// op_code : 172
-/// stack 최상단 2 개의 element 를 각각 공개키와 서명으로 사용하여 taansaction 서명을 검증
-/// 서명이 공개키와 일치하는지를 확인 후 , 검증 결과(true: 1, flase: 00)를 stack 에 다시 push 
-// pub fn op_checksig(stack: &mut Stack) -> bool {
-//     // to do
-//     true
-// }
-
-/// op_code : 173
-/// checksig 와 유사하지만, 검증에 실패할 경우 return false 로 실행 중단 
-/// 성공할 경우 true (정상 실행 유지) 반환 (stack push X)
-// pub fn op_checksigverify(stack: &mut Stack, z) -> bool {
-//     // to do
-//     true
-// }
-
-/// op_code : 174
-/// 다수의 서명(multisig)를 검증
-/// stack 가장 위의 element은 공개키 개수를, 그 아래 element 는 서명의 개수
-/// 모든 서명이 검증에 성공하면 1(true), 그렇지 않으면 0(false) 을 stack 에 push
-// pub fn op_checkmultisig(stack: &mut Stack, z) -> bool {
-//     // to do
-//     true
-// }
-
-/// op_code : 175
-/// op_checkmultisig 에서 stack push 없이 검증이 실패하면 false 를 return 하여 실행 중단
-// pub fn op_checkmultisigverify(stack: &mut Stack, z) -> bool {
-//     // to do
-//     true
-// }
-
-/// op_code : 177
-/// OP_CHECKLOCKTIMEVERIFY (CLTV) 특정 시간 (locktime) 이후 bitcoin 사용할 수 있게 함. 
-/// 추후 코드 검증 필요
-pub fn op_checklocktimeverify(stack: &mut Stack, locktime: u32, sequence: u32) -> bool {
-    if sequence == 0xffffffff { return false; }
-    if stack.is_empty() { return false; }
-
-    if let Some(element) = stack.last() {
-        let n = decode_num(element);
-
-        if n < 0 { return false; }
-
-        // 500,000,000 의 의미
-        // locktime <= 500,000,000 이면 block 높이
-        // locktime < 500,000,000 이면 Unix Epoch Time 으로 해석됨,
-        // stack 에서 가져온 값이 앞의 locktime 의 해석 조건과 동일해야 하므로 
-        // 아래 조건이 충족되면 false return 
-        //
-        // 500,000,000 초는 1970년 00:00:00 으로 부터 약 15.85년 으로 
-        // 이값을 초과하는 locktime 은 Unix 시간으로 해석되며
-        // 그 이하는 block 의 높이로 해석되도록 Bitcoin protocol 상 설계되어 있음.
-        if n < 500_000_000 && locktime > 500_000_000 { return false; }
-
-        // 해당 조건은 아직 transaction 이 실행 될 시점 또는 블록 높이에 도달하지 않았기 때문에
-        // 사용될 수 없음을 만드는 코드 조각.
-        if locktime < n as u32 { return false; }
-    }
-    true
-}
-
-/// op_code : 178
-/// OP_CHECKSEQUENCEVERIFY (CSV) 는 sequence 번호가 지나야 bitcoin 을 사용할 수 있게 함.
-/// (해당 transaction output 을 해당 시간 기간동안 잠그는데 사용) 
-/// 추후 코드 검증 필요
-pub fn op_checksequenceverify(stack: &mut Stack, version: u32, sequence: u32) -> bool {
-    
-    // sequence field 최상위 bit 가 1 인 경우 기존의 상대적인 시간 잠금
-    // (block 이 채굴된 이후 경과된 시간)이 무시되고,
-    // 전통적인 nLockTime (특정 block 높이 또는 시간) 에 의해 잠겨짐 
-    // 이는 Bitcoin protocol 상 설정되어 있음
-    if sequence & (1 << 31) == (1 << 31) { return false; }
-    if stack.is_empty() { return false; }
-
-    if let Some(element) = stack.last() {
-        let n = decode_num(element);
-
-        if n < 0 { return false; }
-        let n_u32 = n as u32;
-
-        if n_u32 & (1 << 31) == (1 << 31) { 
-
-            // 상대적인 locktime 설정은 version 2 이후부터 사용 가능하므로
-            // 이것은 Bitcoin Improvement Proposal (BIP) 68과 112에 의해 도입된 변경 사항임. 
-            // BIP 68은 nSequence 필드에 상대적인 블록 높이 또는 시간을 지정할 수 있게 하였고, 
-            // BIP 112는 OP_CHECKSEQUENCEVERIFY (CSV)를 도입하여 이를 활용할 수 있게 하였음. 
-            // 이들 BIP는 Bitcoin의 트랜잭션 버전 2에서 도입됨.
-            if version < 2 { 
-                return false; 
-                
-            // 앞에서 최상의 bit 에 대한 검사 처리를 했는데, 여기서 또 해야 하는지..
-            // 확인 가능 자료가 없어서 그대로 둠
-            } else if sequence & (1 << 31) == (1 << 31) {
-                return false;
-
-            // BIP 68에서 도입된 상대적인 잠금 시간 기능은 nSequence 필드의 비트를 
-            // 특정한 방식으로 해석하도록 변경하였으며, 이는 nSequence 필드의 22번째 비트는 
-            // 이 필드의 나머지 부분이 블록 높이를 기준으로 한 상대적인 잠금 시간을 나타내는지 
-            // (22번째 비트가 0인 경우), 아니면 초 단위로 표현된 시간을 기준으로 한 
-            // 상대적인 잠금 시간을 나타내는지 (22번째 비트가 1인 경우)를 결정.    
-            } else if n_u32 & (1 << 22) != sequence & (1 << 22) {
-                return false;
-            } else if n_u32 & 0xffff > sequence &  0xffff {
-                return false;
-            }
-        }
-    }
-
-    true
-}
 
 
 // OP_CODE_FUNCTIONS 와 통합 사용
@@ -1168,100 +1179,28 @@ pub const OP_CODE_NAMES: [&str; 186] =[
     "op_nop", "op_nop", "op_nop", "op_nop", "op_nop", "op_nop"  // ~185
 ];
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 pub enum FnTypes {
     StackOnly(Box<dyn Fn(&mut Stack) -> bool>),
     WithElement(Box<dyn Fn(&mut Stack, &mut Vec<u8>) -> bool>),
     WithAltStack(Box<dyn Fn(&mut Stack, &mut Stack) -> bool>),
+    WithZ(Box<dyn Fn(&mut Stack, u8) -> bool>),
     WithSeqOthers(Box<dyn Fn(&mut Stack, u32, u32) -> bool>),
 }
-
-// pub const OP_CODE_FUNCTIONS: HashMap<u8, Box<Fn>> = HashMap::from([
-//     (0, Box::new(op_0()),
-//     (79, "op_1negate"),
-//     (81, "op_1"),
-//     (82, "op_2"),
-//     (83, "op_3"),
-//     (84, "op_4"),
-//     (85, "op_5"),
-//     (86, "op_6"),
-//     (87, "op_7"),
-//     (88, "op_8"),
-//     (89, "op_9"),
-//     (90, "op_10"),
-//     (91, "op_11"),
-//     (92, "op_12"),
-//     (93, "op_13"),
-//     (94, "op_14"),
-//     (95, "op_15"),
-//     (96, "op_16"),
-//     (97, "op_nop"),
-//     (99, "op_if"),
-//     (100, "op_notif"),
-//     (105, "op_verify"),
-//     (106, "op_return"),
-//     (107, "op_toaltstack"),
-//     (108, "op_fromaltstack"),
-//     (109, "op_2drop"),
-//     (110, "op_2dup"),
-//     (111, "op_3dup"),
-//     (112, "op_2over"),
-//     (113, "op_2rot"),
-//     (114, "op_2swap"),
-//     (115, "op_ifdup"),
-//     (116, "op_depth"),
-//     (117, "op_drop"),
-//     (118, "op_dup"),
-//     (119, "op_nip"),
-//     (120, "op_over"),
-//     (121, "op_pick"),
-//     (122, "op_roll"),
-//     (123, "op_rot"),
-//     (124, "op_swap"),
-//     (125, "op_tuck"),
-//     (130, "op_size"),
-//     (135, "op_equal"),
-//     (136, "op_equalverify"),
-//     (139, "op_1add"),
-//     (140, "op_1sub"),
-//     (143, "op_negate"),
-//     (144, "op_abs"),
-//     (145, "op_not"),
-//     (146, "op_0notequal"),
-//     (147, "op_add"),
-//     (148, "op_sub"),
-//     (149, "op_mul"),
-//     (154, "op_booland"),
-//     (155, "op_boolor"),
-//     (156, "op_numequal"),
-//     (157, "op_numequalverify"),
-//     (158, "op_numnotequal"),
-//     (159, "op_lessthan"),
-//     (160, "op_greaterthan"),
-//     (161, "op_lessthanorequal"),
-//     (162, "op_greaterthanorequal"),
-//     (163, "op_min"),
-//     (164, "op_max"),
-//     (165, "op_within"),
-//     (166, "op_ripemd160"),
-//     (167, "op_sha1"),
-//     (168, "op_sha256"),
-//     (169, "op_hash160"),
-//     (170, "op_hash256"),
-//     (172, "op_checksig"),
-//     (173, "op_checksigverify"),
-//     (174, "op_checkmultisig"),
-//     (175, "op_checkmultisigverify"),
-//     (176, "op_nop"),
-//     (177, "op_checklocktimeverify"),
-//     (178, "op_checksequenceverify"),
-//     (179, "op_nop"),
-//     (180, "op_nop"),
-//     (181, "op_nop"),
-//     (182, "op_nop"),
-//     (183, "op_nop"),
-//     (184, "op_nop"),
-//     (185, "op_nop"),
-// ]);
 
 // OP_FUNCTION  구현 현황
 
@@ -1293,7 +1232,7 @@ pub enum FnTypes {
     // 104: 'OP_ENDIF',         미작성
     // 105: 'OP_VERIFY',        작성 완료
     // 106: 'OP_RETURN',        작성 완료
-    // 107: 'OP_TOALTSTACK',    작성 완료
+    // 107: 'OP_TOTALTSTACK',    작성 완료
     // 108: 'OP_FROMALTSTACK',  작성 완료
     // 109: 'OP_2DROP',         작성 완료
     // 110: 'OP_2DUP',          작성 완료
@@ -1361,6 +1300,7 @@ pub enum FnTypes {
 #[cfg(test)]
 mod op_test {
     use super::*;
+    use std::collections::HashMap;
 
     #[test]
     fn sha256_test() {
@@ -1377,16 +1317,14 @@ mod op_test {
     }
 
     #[test]
-    
-    #[test]
     fn hashmap_fn() {
-        let mut a: Vec<u8> = vec![1, 2, 3];
-        let mut b: Vec<u8> = vec![11, 22, 33];
+        let a: Vec<u8> = vec![1, 2, 3];
+        let b: Vec<u8> = vec![11, 22, 33];
         
         let mut stack = Stack(vec![a, b]);
 
-        let mut c: Vec<u8> = vec![9, 8, 7];
-        let mut d: Vec<u8> = vec![99, 88, 77];
+        let c: Vec<u8> = vec![9, 8, 7];
+        let d: Vec<u8> = vec![99, 88, 77];
         
         let mut alt_stack = Stack(vec![c, d]);
 
