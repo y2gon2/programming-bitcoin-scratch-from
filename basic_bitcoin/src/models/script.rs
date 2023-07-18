@@ -1,17 +1,23 @@
 use std::io::{Read, Write};
 use std::error::Error;
 use std::fmt::Display;
+use std::ops::Add;
 
 use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
-use crate::models::helper::*;
-use hex;
+use log::info;
 
-#[derive(Debug)]
-enum Cmd {
+use crate::models::helper::*;
+use crate::models::op::*;
+
+
+
+#[derive(Debug, Clone)]
+pub enum Cmd {
     OpCode(u8),        
     BytesData(Vec<u8>),
 }
 
+#[derive(Debug, Clone)]
 pub struct Script {
     cmds: Vec<Cmd>,
 }
@@ -131,6 +137,500 @@ impl Script {
 
         Ok(encoded)
     }
+
+    pub fn evaluate(&self, z: u8) -> bool {
+        let mut cmds = self.cmds.clone();
+        let mut stack = Stack::new();
+        let mut altstack = Stack::new();
+
+        // element 에 대한 정보 확인 불가!!! 
+        // dummy element, version, sequence, locktime 생성 후 대입
+        let mut element = Vec::<u8>::new(); 
+        let version = 2u32;
+        let sequence = 1_000_000u32;
+        let locktime = 1_000_000u32;
+
+        while let Some(cmd) = cmds.pop() {
+            match cmd {
+                Cmd::BytesData(data) => stack.push(data),
+                Cmd::OpCode(code) => {
+                    let function_name = OP_CODE_NAMES[code as usize];
+                    match code {
+                        0 => { 
+                            if stack.op_0() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        79 => { 
+                            if stack.op_1negate() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        81 => { 
+                            if stack.op_1() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        82 => { 
+                            if stack.op_2() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        83 => { 
+                            if stack.op_3() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        84 => { 
+                            if stack.op_4() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        85 => { 
+                            if stack.op_5() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        86 => { 
+                            if stack.op_6() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        87 => { 
+                            if stack.op_7() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        88 => { 
+                            if stack.op_8() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        89 => { 
+                            if stack.op_9() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        90 => { 
+                            if stack.op_10() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        91 => { 
+                            if stack.op_11() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        92 => { 
+                            if stack.op_12() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        93 => { 
+                            if stack.op_13() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        94 => { 
+                            if stack.op_14() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        95 => { 
+                            if stack.op_15() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        96 => { 
+                            if stack.op_16() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        97 => { 
+                            if stack.op_nop() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        99 => { 
+                            if stack.op_if(&mut element) {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        100 => { 
+                            if stack.op_notif(&mut element) {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        105 => { 
+                            if stack.op_verify() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        106=> { 
+                            if stack.op_return() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        107 => { 
+                            if stack.op_toaltstack(&mut altstack) {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        108 => { 
+                            if stack.op_fromaltstack(&mut altstack) {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        109 => { 
+                            if stack.op_2drop() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        110 => { 
+                            if stack.op_2dup() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        111 => { 
+                            if stack.op_3dup() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        112 => { 
+                            if stack.op_2over() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        113 => { 
+                            if stack.op_2rot() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        114 => { 
+                            if stack.op_2swap() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        115 => { 
+                            if stack.op_ifdup() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        116 => { 
+                            if stack.op_depth() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        117 => { 
+                            if stack.op_drop() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        118 => { 
+                            if stack.op_dup() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        119 => { 
+                            if stack.op_nip() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        120 => { 
+                            if stack.op_over() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        121 => { 
+                            if stack.op_pick() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        122 => { 
+                            if stack.op_roll() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        123 => { 
+                            if stack.op_rot() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        124 => { 
+                            if stack.op_swap() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        125 => { 
+                            if stack.op_tuck() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        130 => { 
+                            if stack.op_size() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        135 => { 
+                            if stack.op_equal() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        136 => { 
+                            if stack.op_equalverify() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        139 => { 
+                            if stack.op_1add() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        140 => { 
+                            if stack.op_1sub() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        143 => { 
+                            if stack.op_negate() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        144 => { 
+                            if stack.op_abs() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        145 => { 
+                            if stack.op_not() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        146 => { 
+                            if stack.op_0notequal() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        147 => { 
+                            if stack.op_add() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        148 => { 
+                            if stack.op_sub() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        149 => { 
+                            if stack.op_mul() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        154 => { 
+                            if stack.op_booland() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        155 => { 
+                            if stack.op_boolor() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        156 => { 
+                            if stack.op_numequal() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        157 => { 
+                            if stack.op_numequalverify() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        158 => { 
+                            if stack.op_numnotequal() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        159 => { 
+                            if stack.op_lessthan() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        160 => { 
+                            if stack.op_greaterthan() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        161 => { 
+                            if stack.op_lessthanorequal() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        162 => { 
+                            if stack.op_greaterthanorequal() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        163 => { 
+                            if stack.op_max() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        164 => { 
+                            if stack.op_min() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        165 => { 
+                            if stack.op_within() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        166 => { 
+                            if stack.op_ripemd160() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        167 => { 
+                            if stack.op_sha1() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        168 => { 
+                            if stack.op_sha256() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        169 => { 
+                            if stack.op_hash160() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        170 => { 
+                            if stack.op_hash256() {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        172 => { 
+                            if stack.op_checksig(z) {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        173 => { 
+                            if stack.op_checksigverify(z) {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        174 => { 
+                            if stack.op_checkmultisig(z) {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        175 => { 
+                            if stack.op_checkmultisigverify(z) {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        177 => { 
+                            if stack.op_checklocktimeverify(locktime, sequence) {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        178 => { 
+                            if stack.op_checksequenceverify(version, sequence) {
+                                info!("bad op : {}", function_name);
+                                return false;    
+                            }
+                        },
+                        _ => info!("invalid op-code : {}", code),
+                    }
+                },
+            }
+
+            };
+        if stack.is_empty() { return false; }
+        if let Some(popped) = stack.pop() {
+            if popped == b"" { return false; }
+        }
+
+        true
+    }
 }
 
 impl Display for Script {
@@ -140,102 +640,12 @@ impl Display for Script {
         for cmd in self.cmds.iter() {
             match cmd {
                 Cmd::OpCode(code) => {
-                    let mut msg = "";
-                    match code {
-                        0 => msg = "OP_0",
-                        // 76 => msg = "OP_PUSHDATA1", // 미구현된 연산자
-                        // 77 => msg = "OP_PUSHDATA2", // 미구현된 연산자
-                        // 78 => msg = "OP_PUSHDATA4", // 미구현된 연산자
-                        79 => msg = "OP_1NEGATE",
-                        81 => msg = "OP_1",
-                        82 => msg = "OP_2",
-                        83 => msg = "OP_3",
-                        84 => msg = "OP_4",
-                        85 => msg = "OP_5",
-                        86 => msg = "OP_6",
-                        87 => msg = "OP_7",
-                        88 => msg = "OP_8",
-                        89 => msg = "OP_9",
-                        90 => msg = "OP_10",
-                        91 => msg = "OP_11",
-                        92 => msg = "OP_12",
-                        93 => msg = "OP_13",
-                        94 => msg = "OP_14",
-                        95 => msg = "OP_15",
-                        96 => msg = "OP_16",
-                        97 => msg = "OP_NOP",
-                        99 => msg = "OP_IF",
-                        100 => msg = "OP_NOTIF",
-                        // 103 => msg = "OP_ELSE",   // 미구현된 연산자
-                        // 104 => msg = "OP_ENDIF",  // 미구현된 연산자
-                        105 => msg = "OP_VERIFY",
-                        106 => msg = "OP_RETURN",
-                        107 => msg = "OP_TOALTSTACK",
-                        108 => msg = "OP_FROMALTSTACK",
-                        109 => msg = "OP_2DROP",
-                        110 => msg = "OP_2DUP",
-                        111 => msg = "OP_3DUP",
-                        112 => msg = "OP_2OVER",
-                        113 => msg = "OP_2ROT",
-                        114 => msg = "OP_2SWAP",
-                        115 => msg = "OP_IFDUP",
-                        116 => msg = "OP_DEPTH",
-                        117 => msg = "OP_DROP",
-                        118 => msg = "OP_DUP",
-                        119 => msg = "OP_NIP",
-                        120 => msg = "OP_OVER",
-                        121 => msg = "OP_PICK",
-                        122 => msg = "OP_ROLL",
-                        123 => msg = "OP_ROT",
-                        124 => msg = "OP_SWAP",
-                        125 => msg = "OP_TUCK",
-                        130 => msg = "OP_SIZE",
-                        135 => msg = "OP_EQUAL",
-                        136 => msg = "OP_EQUALVERIFY",
-                        139 => msg = "OP_1ADD",
-                        140 => msg = "OP_1SUB",
-                        143 => msg = "OP_NEGATE",
-                        144 => msg = "'OP_ABS",
-                        145 => msg = "OP_NOT",
-                        146 => msg = "OP_0NOTEQUAL",
-                        147 => msg = "OP_ADD",
-                        148 => msg = "OP_SUB",
-                        149 => msg = "OP_MUL",
-                        154 => msg = "OP_BOOLAND",
-                        155 => msg = "OP_BOOLOR",
-                        156 => msg = "OP_NUMEQUAL",
-                        157 => msg = "OP_NUMEQUALVERIFY",
-                        158 => msg = "OP_NUMNOTEQUAL",
-                        159 => msg = "OP_LESSTHAN",
-                        160 => msg = "OP_GREATERTHAN",
-                        161 => msg = "OP_LESSTHANOREQUAL",
-                        162 => msg = "OP_GREATERTHANOREQUAL",
-                        163 => msg = "OP_MIN",
-                        164 => msg = "OP_MAX",
-                        165 => msg = "OP_WITHIN",
-                        166 => msg = "OP_RIPEMD160",
-                        167 => msg = "OP_SHA1",
-                        168 => msg = "OP_SHA256",
-                        169 => msg = "OP_HASH160",
-                        170 => msg = "OP_HASH256",
-                        171 => msg = "OP_CODESEPARATOR",
-                        // 172 => msg = "OP_CHECKSIG",               // 미구현된 연산자
-                        // 173 => msg = "OP_CHECKSIGVERIFY",         // 미구현된 연산자
-                        // 174 => msg = "OP_CHECKMULTISIG",          // 미구현된 연산자
-                        // 175 => msg = "OP_CHECKMULTISIGVERIFY",    // 미구현된 연산자
-                        // 176 => msg = "OP_NOP1",   // 미구현된 연산자
-                        177 => msg = "OP_CHECKLOCKTIMEVERIFY",
-                        178 => msg = "OP_CHECKSEQUENCEVERIFY",
-                        // 179 => msg = "OP_NOP4",   // 미구현된 연산자
-                        // 180 => msg = "OP_NOP5",   // 미구현된 연산자
-                        // 181 => msg = "OP_NOP6",   // 미구현된 연산자
-                        // 182 => msg = "OP_NOP7",   // 미구현된 연산자
-                        // 183 => msg = "OP_NOP8",   // 미구현된 연산자
-                        // 184 => msg = "OP_NOP9",   // 미구현된 연산자
-                        // 185 => msg = "OP_NOP10",  // 미구현된 연산자
-                        others => msg = format!("OP_[{}]", others).as_str(),
+                    let function_name = OP_CODE_NAMES[*code as usize];
+                    if  function_name == "" { 
+                        messages.push(format!("OP_[{}]", code)); 
+                    } else {
+                        messages.push(function_name.to_string());
                     }
-                    messages.push(msg.to_string());
                 },
                 Cmd::BytesData(data) => {
                     let hex_string: String = data.iter().map(|b| format!("{:02x}", b)).collect();
@@ -246,6 +656,33 @@ impl Display for Script {
         write!(f, "{}", messages.join(" "))
     }
 }
+
+/// Add trait implementation 이 필요한 이유
+/// 
+/// Bitcoin Scripting System 은 크게 다음 두가지 scripting 이 사용된다.
+/// 1. Locking Script (or Script Pubkey)
+///    transaction output 의 일부로, transacion output 을 '잠금'하는 역할을 한다.
+///    이는 특정 조건을 만족하는 사람만이 해당 transaction output 을 사용할 수 이도록 한다.
+/// 
+/// 2. Unlocking Script (or ScriptSig)
+///    Transaction input 의 일부로, 잠긴 transaction output 을 '해제' 하는 역할을 한다.
+/// 
+/// Bitcoin 에서 Transaction output 을 사용하려면, (즉 새 transaction input 을 사용하려면) 
+/// 해당 transaction output 의 locking script 와 새로운 transaction 의 unlocking script 를 
+/// 합쳐서 실행해야 한다. 
+/// 이 두 script 가 합쳐진 후에는 하나의 완전한 script 처럼 동작하며, 이 script 가 성공적으로
+/// 실행되면 transaction output 의 사용이 허가된다. 
+/// 따라서 위 작업을 'Add' trait impl 로 단순하고 명시적으로 결합 작업이 진해도도록 만들어준다. 
+impl Add for Script {
+    type Output = Script;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        let mut added = self.cmds.clone();
+        added.extend(rhs.cmds);
+        Script { cmds: added }        
+    }
+}
+
 
 
 #[cfg(test)]
