@@ -1,4 +1,5 @@
 use std::ops::{Deref, DerefMut};
+use std::collections::HashMap;
 use sha1::Sha1;
 use sha2::{Sha256, Digest};
 use ripemd::Ripemd160;
@@ -424,8 +425,8 @@ pub fn op_2over(stack: &mut Stack) -> bool {
     let length = stack.len();
 
     if length < 4 { return false; }
-
-    stack.extend(stack[length - 4.. length - 2].to_vec());
+    let stack_slice = stack[length - 4.. length - 2].to_vec();
+    stack.extend(stack_slice);
     true
 }
 
@@ -460,14 +461,12 @@ pub fn op_2swap(stack: &mut Stack) -> bool {
 /// op_code : 115
 /// stack 최상단 element 가 0 (거짓) 이 아닌 경우, 그 값을 복사하여 최상단에 추가
 pub fn op_ifdup(stack: &mut Stack) -> bool {
-    if let Some(top) = stack.last() {
-        if decode_num(top) !=  0{
-            stack.push(*top);
-        }
-        return true;
-    } else {
-        return false;
+    if stack.is_empty() { return false; }
+    let top = stack[stack.len() - 1].clone();
+    if decode_num(&top) !=  0 {
+        stack.push(top);
     }
+    true
 }
 
 /// op_code : 116
@@ -491,18 +490,21 @@ pub fn op_drop(stack: &mut Stack) -> bool {
 /// op_dup  : stack 최상단 element 를 복사하여 stack 위에 저장
 /// op_code_functions : 118 
 pub fn op_dup(stack: &mut Stack) -> bool {
-    if stack.len() < 1 { return false; }
-
-    stack.push(*stack.last().unwrap());
+    let length = stack.len();
+    if length < 1 { return false; }
+    
+    let element = stack[length - 1].clone();
+    stack.push(element);
     true
 }
 
 /// op_code : 119
 /// stack 최상단에서 두번째 element 를 버림
 pub fn op_nip(stack: &mut Stack) -> bool {
-    if stack.len() < 2 { return false; }
+    let length = stack.len();
+    if length < 2 { return false; }
 
-    stack.remove(stack.len() - 2);
+    stack.remove(length - 2);
     true
 }
 
@@ -512,7 +514,8 @@ pub fn op_over(stack: &mut Stack) -> bool {
     let length = stack.len();
     if length < 1 { return false; }
 
-    stack.push(stack[length - 2]);
+    let element = stack[length - 2].clone();
+    stack.push(element);
     true 
 }
 
@@ -523,10 +526,12 @@ pub fn op_pick(stack: &mut Stack) -> bool {
     if stack.is_empty() { return false; }
 
     let n = decode_num(&stack.pop().unwrap()) as usize;
+    let length = stack.len();
 
-    if n >= 0 && stack.len() <= n { return false; }
+    if n >= 0 && length <= n { return false; }
 
-    stack.push(stack[stack.len() - n]);
+    let element = stack[length - n].clone();
+    stack.push(element);
     true
 }
 
@@ -537,10 +542,11 @@ pub fn op_roll(stack: &mut Stack) -> bool {
     if stack.is_empty() { return false; }
 
     let n = decode_num(&stack.pop().unwrap()) as usize;
-
-    if n >=  0 && stack.len() <= n { return false; }
+    let length = stack.len();
+    if n >=  0 && length  <= n { return false; }
     
-    stack.push(stack.remove(stack.len() - n));
+    let element = stack.remove(length - n);
+    stack.push(element);
     true
 }
 
@@ -550,8 +556,9 @@ pub fn op_rot(stack: &mut Stack) -> bool {
     let length = stack.len();
 
     if length < 3 { return false; }
-
-    stack.push(stack.remove(length - 3));
+    
+    let element = stack.remove(length - 3);  
+    stack.push(element);
     true
 }
 
@@ -561,7 +568,8 @@ pub fn op_swap(stack: &mut Stack) -> bool {
     let length = stack.len();
     if length < 2 { return false; }
 
-    stack.push(stack.remove(length - 2));
+    let element = stack.remove(length - 2);
+    stack.push(element);
     true
 }
 
@@ -571,7 +579,8 @@ pub fn op_tuck(stack: &mut Stack) -> bool {
     let length = stack.len();
     if length < 2 { return false; }
 
-    stack.push(stack[length - 2]);
+    let element = stack[length - 2].clone();
+    stack.push(element);
     true
 }
 
@@ -1003,7 +1012,9 @@ pub fn po_hash256(stack: &mut Stack) -> bool {
     if let Some(element) = stack.pop() {
         let mut hasher = Sha256::new();
         hasher.update(element);
-        hasher.update(hasher.finalize_reset());
+
+        let re_hasher = hasher.finalize_reset();
+        hasher.update(re_hasher);
             
         stack.push(hasher.finalize().to_vec());
     }
@@ -1015,7 +1026,7 @@ pub fn po_hash256(stack: &mut Stack) -> bool {
 /// script 내에서 현재 위치 이후의 연산자들만 고려하는 특별한 체크포인트를 설정
 /// 이 연산자는 transaction의 서명을 검증하는 과정에서 사용
 /// script 가 이 연산자를 만나면, 이 연산자 이후의 부분만이 서명 hash의 생성에 사용됩니다.
-// pub fn op_codeseparator(stack: &mut Stack) -> bool {
+// pub fn op_codeseparator(stack: &mut Stack, z) -> bool {
     
 //     true
 // }
@@ -1024,34 +1035,34 @@ pub fn po_hash256(stack: &mut Stack) -> bool {
 /// op_code : 172
 /// stack 최상단 2 개의 element 를 각각 공개키와 서명으로 사용하여 taansaction 서명을 검증
 /// 서명이 공개키와 일치하는지를 확인 후 , 검증 결과(true: 1, flase: 00)를 stack 에 다시 push 
-pub fn op_checksig(stack: &mut Stack) -> bool {
-    // to do
-    true
-}
+// pub fn op_checksig(stack: &mut Stack) -> bool {
+//     // to do
+//     true
+// }
 
 /// op_code : 173
 /// checksig 와 유사하지만, 검증에 실패할 경우 return false 로 실행 중단 
 /// 성공할 경우 true (정상 실행 유지) 반환 (stack push X)
-pub fn op_checksigverify(stack: &mut Stack) -> bool {
-    // to do
-    true
-}
+// pub fn op_checksigverify(stack: &mut Stack, z) -> bool {
+//     // to do
+//     true
+// }
 
 /// op_code : 174
 /// 다수의 서명(multisig)를 검증
 /// stack 가장 위의 element은 공개키 개수를, 그 아래 element 는 서명의 개수
 /// 모든 서명이 검증에 성공하면 1(true), 그렇지 않으면 0(false) 을 stack 에 push
-pub fn op_checkmultisig(stack: &mut Stack) -> bool {
-    // to do
-    true
-}
+// pub fn op_checkmultisig(stack: &mut Stack, z) -> bool {
+//     // to do
+//     true
+// }
 
 /// op_code : 175
 /// op_checkmultisig 에서 stack push 없이 검증이 실패하면 false 를 return 하여 실행 중단
-pub fn op_checkmultisigverify(stack: &mut Stack) -> bool {
-    // to do
-    true
-}
+// pub fn op_checkmultisigverify(stack: &mut Stack, z) -> bool {
+//     // to do
+//     true
+// }
 
 /// op_code : 177
 /// OP_CHECKLOCKTIMEVERIFY (CLTV) 특정 시간 (locktime) 이후 bitcoin 사용할 수 있게 함. 
@@ -1132,6 +1143,125 @@ pub fn op_checksequenceverify(stack: &mut Stack, version: u32, sequence: u32) ->
 
     true
 }
+
+
+// OP_CODE_FUNCTIONS 와 통합 사용
+pub const OP_CODE_NAMES: [&str; 186] =[
+    "op_0", "", "", "", "", "", "", "", "", "", // ~9
+    "", "", "", "", "", "", "", "", "", "",     // ~19
+    "", "", "", "", "", "", "", "", "", "",     // ~29
+    "", "", "", "", "", "", "", "", "", "",     // ~39 
+    "", "", "", "", "", "", "", "", "", "",     // ~49
+    "", "", "", "", "", "", "", "", "", "",     // ~59 
+    "", "", "", "", "", "", "", "", "", "",     // ~69 
+    "", "", "", "", "", "", "", "", "", "op_1negate",     // ~79 
+    "", "op_1", "op_2", "op_3", "op_4", "op_5", "op_6", "op_7", "op_8", "op_9",  // ~89
+    "op_10", "op_11", "op_12","op_13", "op_14", "op_15", "op_16", "op_nop", "", "op_if", // ~99
+    "op_notif", "", "", "", "", "op_verify", "op_return", "op_toaltstack", "op_fromaltstack", "op_2drop", // ~109
+    "op_2dup", "op_3dup", "op_2over", "op_2rot", "op_2swap", "op_ifdup", "op_depth", "op_drop", "op_dup", "op_nip",  // ~119
+    "op_over", "op_pick", "op_roll", "op_rot", "op_swap", "op_tuck", "", "", "", "",  // ~129
+    "op_size", "", "", "", "", "op_equal", "op_equalverify", "", "", "op_1add",  // ~139
+    "op_1sub", "", "", "op_negate", "op_abs", "op_not", "op_0notequal", "op_add", "op_sub", "op_mul",  // ~149
+    "", "", "", "", "op_booland", "op_boolor", "op_numequal", "op_numequalverify", "op_numnotequal", "op_lessthan",  // ~159
+    "op_greaterthan", "op_lessthanorequal", "op_greaterthanorequal", "op_min", "op_max", "op_within", "op_ripemd160", "op_sha1", "op_sha256", "op_hash160",  // ~169
+    "op_hash256", "", "op_checksig", "op_checksigverify", "op_checkmultisig", "op_checkmultisigverify", "op_nop", "op_checklocktimeverify", "op_checksequenceverify", "op_nop",  // ~179
+    "op_nop", "op_nop", "op_nop", "op_nop", "op_nop", "op_nop"  // ~185
+];
+
+pub enum FnTypes {
+    StackOnly(Box<dyn Fn(&mut Stack) -> bool>),
+    WithElement(Box<dyn Fn(&mut Stack, &mut Vec<u8>) -> bool>),
+    WithAltStack(Box<dyn Fn(&mut Stack, &mut Stack) -> bool>),
+    WithSeqOthers(Box<dyn Fn(&mut Stack, u32, u32) -> bool>),
+}
+
+// pub const OP_CODE_FUNCTIONS: HashMap<u8, Box<Fn>> = HashMap::from([
+//     (0, Box::new(op_0()),
+//     (79, "op_1negate"),
+//     (81, "op_1"),
+//     (82, "op_2"),
+//     (83, "op_3"),
+//     (84, "op_4"),
+//     (85, "op_5"),
+//     (86, "op_6"),
+//     (87, "op_7"),
+//     (88, "op_8"),
+//     (89, "op_9"),
+//     (90, "op_10"),
+//     (91, "op_11"),
+//     (92, "op_12"),
+//     (93, "op_13"),
+//     (94, "op_14"),
+//     (95, "op_15"),
+//     (96, "op_16"),
+//     (97, "op_nop"),
+//     (99, "op_if"),
+//     (100, "op_notif"),
+//     (105, "op_verify"),
+//     (106, "op_return"),
+//     (107, "op_toaltstack"),
+//     (108, "op_fromaltstack"),
+//     (109, "op_2drop"),
+//     (110, "op_2dup"),
+//     (111, "op_3dup"),
+//     (112, "op_2over"),
+//     (113, "op_2rot"),
+//     (114, "op_2swap"),
+//     (115, "op_ifdup"),
+//     (116, "op_depth"),
+//     (117, "op_drop"),
+//     (118, "op_dup"),
+//     (119, "op_nip"),
+//     (120, "op_over"),
+//     (121, "op_pick"),
+//     (122, "op_roll"),
+//     (123, "op_rot"),
+//     (124, "op_swap"),
+//     (125, "op_tuck"),
+//     (130, "op_size"),
+//     (135, "op_equal"),
+//     (136, "op_equalverify"),
+//     (139, "op_1add"),
+//     (140, "op_1sub"),
+//     (143, "op_negate"),
+//     (144, "op_abs"),
+//     (145, "op_not"),
+//     (146, "op_0notequal"),
+//     (147, "op_add"),
+//     (148, "op_sub"),
+//     (149, "op_mul"),
+//     (154, "op_booland"),
+//     (155, "op_boolor"),
+//     (156, "op_numequal"),
+//     (157, "op_numequalverify"),
+//     (158, "op_numnotequal"),
+//     (159, "op_lessthan"),
+//     (160, "op_greaterthan"),
+//     (161, "op_lessthanorequal"),
+//     (162, "op_greaterthanorequal"),
+//     (163, "op_min"),
+//     (164, "op_max"),
+//     (165, "op_within"),
+//     (166, "op_ripemd160"),
+//     (167, "op_sha1"),
+//     (168, "op_sha256"),
+//     (169, "op_hash160"),
+//     (170, "op_hash256"),
+//     (172, "op_checksig"),
+//     (173, "op_checksigverify"),
+//     (174, "op_checkmultisig"),
+//     (175, "op_checkmultisigverify"),
+//     (176, "op_nop"),
+//     (177, "op_checklocktimeverify"),
+//     (178, "op_checksequenceverify"),
+//     (179, "op_nop"),
+//     (180, "op_nop"),
+//     (181, "op_nop"),
+//     (182, "op_nop"),
+//     (183, "op_nop"),
+//     (184, "op_nop"),
+//     (185, "op_nop"),
+// ]);
 
 // OP_FUNCTION  구현 현황
 
@@ -1244,5 +1374,96 @@ mod op_test {
         let result = hasher.finalize();
 
         println!("{:?}", result);
+    }
+
+    #[test]
+    
+    #[test]
+    fn hashmap_fn() {
+        let mut a: Vec<u8> = vec![1, 2, 3];
+        let mut b: Vec<u8> = vec![11, 22, 33];
+        
+        let mut stack = Stack(vec![a, b]);
+
+        let mut c: Vec<u8> = vec![9, 8, 7];
+        let mut d: Vec<u8> = vec![99, 88, 77];
+        
+        let mut alt_stack = Stack(vec![c, d]);
+
+        pub enum FnTypesTest {
+            StackOnly(Box<dyn Fn(&mut Stack) -> bool>),
+            WithElement(Box<dyn Fn(&mut Stack, &mut Vec<u8>) -> bool>),
+            WithAltStack(Box<dyn Fn(&mut Stack, &mut Stack) -> bool>),
+            WithSeqOthers(Box<dyn Fn(&mut Stack, u32, u32) -> bool>),
+        }
+
+        fn f1(stack: &mut Stack) -> bool {
+            stack.pop();
+            true
+        }
+
+        fn f2(stack: &mut Stack, v: &mut Vec<u8>) -> bool {
+            stack.push(v.clone());
+            true
+        }
+
+        fn f3(stack: &mut Stack, alt_stack: &mut Stack) -> bool {
+            stack.append(alt_stack);
+            true
+        }
+
+        fn f4(stack: &mut Stack, n1: u32, n2: u32) -> bool {
+            println!("stack:{:?}\tn1:{}\tn2:{}", stack, n1, n2);
+            true
+        }
+
+        let hash: HashMap<u8, FnTypesTest> = HashMap::from([
+            (1, FnTypesTest::StackOnly(Box::new(f1))),
+            (2, FnTypesTest::WithElement(Box::new(f2))),
+            (3, FnTypesTest::WithAltStack(Box::new(f3))),
+            (4, FnTypesTest::WithSeqOthers(Box::new(f4))),
+        ]);
+
+        for i in 1..=4 as u8 {
+            match hash.get(&i) {
+                Some(FnTypesTest::StackOnly(func)) => {
+                    func(&mut stack);
+                    println!("1: {:?}", stack);
+                },
+                Some(FnTypesTest::WithElement(func)) => {
+                    func(&mut stack, &mut vec![6, 7, 8]);
+                    println!("2: {:?}", stack);
+                }
+                Some(FnTypesTest::WithAltStack(func)) => {
+                    func(&mut stack, &mut alt_stack);
+                    println!("3: {:?}", stack);
+                },
+                Some(FnTypesTest::WithSeqOthers(func)) => {
+                    func(&mut stack, 200, 201);
+                    println!("4: {:?}", stack);
+                },
+                None => {();},
+            }
+            
+        }
+    }   
+
+    #[test]
+    fn t1() {
+        fn function1(arg: i32) -> i32 {
+            arg + 1
+        }
+        
+        fn function2(arg: i32) -> i32 {
+            arg * 2
+        }
+        let functions: Vec<Box<dyn Fn(i32) -> i32>> = vec![
+            Box::new(function1),
+            Box::new(function2),
+        ];
+        
+        for func in functions {
+            println!("{}", func(2));  // prints "3" and "4" respectively
+        }
     }
 }
