@@ -12,7 +12,7 @@
 //     Ok(())
 // }
 
-use sha2::{Sha256, Sha512, Digest};
+use sha2::{Sha256, Digest};
 
 fn main() {
     // create a Sha256 object

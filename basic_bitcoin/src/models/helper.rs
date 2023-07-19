@@ -48,10 +48,12 @@ pub fn u32_to_little_endian(input: u32, len: u8) -> Result<Vec<u8>, Box<dyn Erro
 // 2^16 ~ 2^32-1       접두부 0xfe 이후 4bytes little endian    70015 -> 0xfe7f110100 
 // 2^32 ~ 2^64-1       접두부 0xff 이후 8bytes little endian    81005558675309 -> 0xff6dc7ed3e60100000
 
-// stream 으로 부터 필요한 bytes 만큼 읽고 정수로 반환
+/// stream 으로 부터 필요한 bytes 만큼 읽고 정수로 반환
 pub fn read_varint<R: Read>(reader: &mut R) -> Result<u64, std::io::Error> {
-    let mut buf = [0u8; 1];
-    reader.read_exact(&mut buf)?;
+    let mut buf = Vec::<u8>::new();
+ 
+    reader.read_to_end(&mut buf)?;
+    println!("{:?}", buf);
     let i = buf[0];
 
     let mut buf = [0u8; 8];

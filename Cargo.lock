@@ -58,6 +58,7 @@ dependencies = [
  "bincode",
  "byteorder",
  "hex",
+ "log",
  "num",
  "num-traits",
  "rand",
