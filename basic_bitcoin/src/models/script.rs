@@ -32,7 +32,6 @@ impl Script {
 
     pub fn parse<R: Read>(reader: &mut R) -> Result<Self, Box<dyn Error>> {
         let length = read_varint(reader)?;
-
         let mut cmds = Vec::<Cmd>::new();
         let mut count = 0usize;
 
