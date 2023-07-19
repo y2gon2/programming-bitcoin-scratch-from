@@ -1068,6 +1068,16 @@ impl Stack {
 
         true
     }
+
+    /// test 용 pop
+    pub fn stack_pop(&mut self) -> Vec<u8> {
+        self.0.pop().unwrap()
+    }
+
+    /// test 용 vec push
+    pub fn stack_push(&mut self, element: Vec<u8>) {
+        self.0.push(element);
+    }
 }
 
 impl Deref for Stack {
@@ -1099,10 +1109,9 @@ pub fn encode_num(num: i32) -> Vec<u8> {
     let negative = num < 0;
     let mut result = vec![];
 
-    let num_clone = num.clone();
     // 뒤 8bits 부터 저장
-    while num_clone != 0 {
-        result.push((num_clone & 0xff) as u8);
+    while abs_num != 0 {
+        result.push((abs_num & 0xff) as u8);
         abs_num >>= 8;
     }
 
@@ -1404,4 +1413,6 @@ mod op_test {
             println!("{}", func(2));  // prints "3" and "4" respectively
         }
     }
+
+
 }
