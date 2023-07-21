@@ -30,6 +30,20 @@ impl Script {
         }
     }
 
+    /// helper fucntion 에서 address script 에 대해 checksum 을 확인한
+    /// payload (20bytes) 를 받아서 잠금 script 로 번환하는  method
+    pub fn p2pkh_script(h160: Vec<u8>) -> Self {
+        Self {
+            cmds: vec![
+                Cmd::OpCode(0x76),      // OP_DUP
+                Cmd::OpCode(0xa9),      // OP_HASH160
+                Cmd::BytesData(h160),   // valid payload 
+                Cmd::OpCode(0x88),      // OP_EQUALVERIFY
+                Cmd::OpCode(0xac)       // OP_CHECKSIG
+            ],
+        }        
+    }
+
     pub fn parse<R: Read>(reader: &mut R) -> Result<Self, Box<dyn Error>> {
         let length = read_varint(reader)?;
         let mut cmds = Vec::<Cmd>::new();
