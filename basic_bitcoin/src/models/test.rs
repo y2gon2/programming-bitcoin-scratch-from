@@ -168,4 +168,8 @@ mod op_test {
         println!("{}", script); // op_6 op_dup op_equal op_add op_mul 0164c8ff
     }
 
+    #[test]
+    fn creat_tx() {
+        
+    }
 }
