@@ -1,24 +1,21 @@
 use std::error::Error;
 use std::fmt::Display;
-use std::hash::{Hash, Hasher};
-use std::collections::hash_map::{DefaultHasher, HashMap};
-use std::io::{stdin, stdout, Read, Write, Cursor};
-use serde::ser::{Serialize, Serializer, SerializeStruct};
+use std::hash::Hash;
+use std::collections::hash_map::HashMap;
+use std::io::{Read, Cursor};
 use sha2::{Sha256, Digest};
 use hex;
-use bincode;
 use byteorder::{ByteOrder, LittleEndian};
-use anyhow::{bail, Result};
+use anyhow::Result;
 
 
 use crate::models::helper::*;
 
+use super::script::Script;
+
 //---------------------
 //         Tx
 //---------------------
-
-type version = u32;
-type locktime = u32;
 
 #[derive(Hash, Debug, Clone)]
 pub struct Tx {
@@ -31,10 +28,10 @@ pub struct Tx {
 
 impl Tx {
     pub fn new(
-        version: version, 
+        version: u32, 
         tx_ins: Option<Vec<TxIn>>, 
         tx_outs: Option<Vec<TxOut>>, 
-        locktime: Option<locktime>, 
+        locktime: Option<u32>, 
     ) -> Self {
         Self {
             version,
@@ -73,37 +70,37 @@ impl Tx {
         // Stream 에서 version(4 bytes, little-endian) 읽기
         let mut version_bytes = [0u8; 4];
         reader.read_exact(&mut version_bytes)?;
-        let version = version::from_le_bytes(version_bytes);
+        let version = u32::from_le_bytes(version_bytes);
 
         // Stream 에서  num_inputs (helper::varint) 읽기
-        let num_inputs = read_varint(reader)?;`
+        let num_inputs = read_varint(reader)?;
 
         // Parse num_inputs number of TxIns (검토 및 재작성) 
         let mut inputs = Vec::with_capacity(num_inputs as usize);
         for _ in 0..num_inputs {
             let input = TxIn::parse(reader)?;
-            input.push(input);
+            inputs.push(input);
         }
 
         // Stream 에서 num_outputs (hepler::varint) 읽기
         let num_outputs = read_varint(reader)?;
 
         // Parse num_outputs number of TxIns (검토 및 재작성)
-        let output = Vec::with_capacity(num_outputs as usize);
+        let mut outputs = Vec::with_capacity(num_outputs as usize);
         for _ in 0..num_outputs {
              let output = TxOut::parse(reader)?;
-             output.push(output);
+             outputs.push(output);
         }
 
         // Stream 에서 locktime (4 bytes, little-endian) 읽기
         let mut locktime_bytes = [0u8; 4];
         reader.read_exact(&mut locktime_bytes)?;
-        let locktime = locktime::from_le_bytes(locktime_bytes);
+        let locktime = u32::from_le_bytes(locktime_bytes);
 
         Ok(Self {
             version,
-            tx_ins: Some(input),   
-            tx_outs: Some(output),  
+            tx_ins: Some(inputs),   
+            tx_outs: Some(outputs),  
             locktime: Some(locktime), 
             testnet: false,
         })
@@ -117,7 +114,7 @@ impl Tx {
 
         let mut tx_ins_serde = Vec::<u8>::new();
 
-        if let Some(internal_tx_ins) = self.tx_ins {
+        if let Some(internal_tx_ins) = &self.tx_ins {
             let mut num_of_input = encode_varint(internal_tx_ins.len() as u32)?;
             tx_ins_serde.append(&mut num_of_input);
 
@@ -129,7 +126,7 @@ impl Tx {
 
         let mut tx_outs_serde = Vec::<u8>::new();
 
-        if let Some(internal_tx_outs) = self.tx_outs {
+        if let Some(internal_tx_outs) = &self.tx_outs {
             let mut num_of_output = encode_varint(internal_tx_outs.len() as u32)?;
             tx_outs_serde.append(&mut num_of_output);
 
@@ -151,13 +148,13 @@ impl Tx {
     pub fn fee(&self, tx_fetcher: &mut TxFetcher) -> Result<u64, Box<dyn Error>> {
         let (mut input_sum, mut output_sum) = (0u64, 0u64);
 
-        if let Some(tx_ins) = self.tx_ins {
+        if let Some(tx_ins) = &self.tx_ins {
             for tx_in in tx_ins {
                 input_sum += tx_in.value(tx_fetcher)?;
             }
         }
 
-        if let Some(tx_outs) = self.tx_outs {
+        if let Some(tx_outs) = &self.tx_outs {
             for tx_out in tx_outs {
                 output_sum += tx_out.amount;
             }
@@ -181,21 +178,21 @@ impl Tx {
     ///             그리고 transaction 에서 참조하는 공개키를 사용하여 서명을 검증
     ///             서명이 유요하다면 해당 transaction 이 해당 개인키 소유자에 의해
     ///             유효하게 생성되었음을 보장할 수 있음.
-    pub fn sig_hash(&self, input_index: usize, redeem_script: usize) -> Result<u32, Box<dyn Error>>{
-        let mut buf = [0; 4];
-        LittleEndian::write_u32(&mut buf, self.version);
+    // pub fn sig_hash(&self, input_index: usize, redeem_script: usize) -> Result<u32, Box<dyn Error>>{
+    //     let mut buf = [0; 4];
+    //     LittleEndian::write_u32(&mut buf, self.version);
 
-        let mut s = buf.to_vec();
-        s.append(&mut encode_varint(self.tx_ins.unwrap().len() as u32)?); 
+    //     let mut s = buf.to_vec();
+    //     s.append(&mut encode_varint(self.tx_ins.unwrap().len() as u32)?); 
 
-        for (idx, tx_in) in self.tx_ins.unwrap().iter().enumerate() {
-            if idx == input_index {
+    //     for (idx, tx_in) in self.tx_ins.unwrap().iter().enumerate() {
+    //         if idx == input_index {
 
-            }
-        }
+    //         }
+    //     }
 
-        Err("TO_DO".into())
-    }
+    //     Err("TO_DO".into())
+    // }
 
     /// ****  TO DO  ****
     pub fn verify_input(&self, input_index:  usize) -> bool {
@@ -206,7 +203,8 @@ impl Tx {
         // if self.fee() < 0 {
         //     return false
         // } 
-        for i in 0..self.tx_ins.unwrap().len() {
+        let length = self.tx_ins.as_ref().map(|v| v.len()).unwrap_or(0);
+        for i in 0..length {
             if !self.verify_input(i) {
                 return false;
             }
@@ -252,7 +250,7 @@ impl Display for Tx {
 
 type PrevTx = Vec<u8>;
 type PrevIndex = u32;
-type ScriptSig = Vec<u8>; 
+type ScriptSig = super::script::Script; 
 type Sequence = u32;
 
 
@@ -306,7 +304,7 @@ impl TxIn {
         }
     } 
 
-    pub fn parse<R: Read>(reader: R) -> Result<Self, Box<dyn Error>> {
+    pub fn parse<R: Read>(reader: &mut R) -> Result<Self, Box<dyn Error>> {
         
         // prev_tx (32bytes, little-endian)
         let mut prev_tx = Vec::<u8>::new();
@@ -319,7 +317,7 @@ impl TxIn {
         
         let  prev_index = PrevIndex::from_le_bytes(prev_index_bytes);
 
-        // let script_sig =  // to do
+        let script_sig =  Some(Script::parse(reader)?);
 
         let mut seq_bytes = [0u8; 4];
         reader.read_exact(&mut seq_bytes)?;
@@ -352,7 +350,7 @@ impl TxIn {
     pub fn fetch_tx(&self, tx_fetcher: &mut TxFetcher) -> Result<Tx, Box<dyn Error>>{
         let tx = TxFetcher::fetch(
             tx_fetcher, 
-            hex::encode(self.prev_tx), 
+            hex::encode(&self.prev_tx), 
             false, 
             false
         )?;
@@ -360,7 +358,7 @@ impl TxIn {
     }
 
     pub fn value(&self, tx_fetcher: &mut TxFetcher) -> Result<Amount, Box<dyn Error>> {
-        let mut tx = self.fetch_tx(tx_fetcher)?;
+        let tx = self.fetch_tx(tx_fetcher)?;
         let tx_outs = tx.tx_outs.unwrap();
         Ok(tx_outs[self.prev_index as usize].amount)
     }
@@ -368,18 +366,16 @@ impl TxIn {
     pub fn script_pubkey(&self, tx_fetchre: &mut TxFetcher) -> Result<ScriptPubkey, Box<dyn Error>>{
         let tx = self.fetch_tx(tx_fetchre)?;
         let tx_outs = tx.tx_outs.unwrap();
-        Ok(tx_outs[self.prev_index as usize].script_pubkey)
+        Ok(tx_outs[self.prev_index as usize].script_pubkey.clone())
     }
 }
 
 impl Display for TxIn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut hex = String::new();
-
         write!(
             f,
             "{}: {}",
-            hex::encode(self.prev_tx), 
+            hex::encode(self.prev_tx.clone()), 
             self.prev_index,
         )
     }
@@ -390,7 +386,7 @@ impl Display for TxIn {
 //---------------------
 
 type Amount = u64;
-type ScriptPubkey = Vec<u8>;
+type ScriptPubkey = super::script::Script;
 
 #[derive(Hash, Debug, Clone)]
 pub struct TxOut {
@@ -414,13 +410,13 @@ impl TxOut {
         }
     }
 
-    pub fn parse<R: Read>(reader: R) -> Result<Self, Box<dyn Error>> {
+    pub fn parse<R: Read>(reader: &mut R) -> Result<Self, Box<dyn Error>> {
         let mut amount_bytes = [0u8; 8];
         reader.read_exact(&mut amount_bytes)?;
         
         let amount = little_endian_to_u64(&amount_bytes);
 
-        // let script_pubkey = Script.parse(S);
+        let script_pubkey = Script::parse(reader)?;
 
         Ok(Self { amount, script_pubkey })
     }
@@ -428,7 +424,7 @@ impl TxOut {
     pub fn serialize(&self) -> Result<Vec<u8>, Box<dyn Error>> {
         let mut result = Vec::<u8>::new();
 
-        let mut amount = self.amount.to_le_bytes();
+        let amount = self.amount.to_le_bytes();
         result.append(&mut amount.to_vec());
 
         // let mut script_pubkey = self.script_pubkey.serialize(); // to do
@@ -440,7 +436,7 @@ impl TxOut {
 
 impl Display for TxOut {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.amount, hex::encode(self.script_pubkey))
+        write!(f, "{}: {}", self.amount, self.script_pubkey)
     }
 }
 
@@ -505,7 +501,7 @@ impl TxFetcher {
 
                 // Cursor struct 를 사용하여 in-memory Buffer 에 입력된 raw transation data 를 넣음. 
                 let mut tx = Tx::parse(&mut Cursor::new(raw.clone()), testnet)?;
-                tx.locktime = Some(LittleEndian::read_i32(&raw[raw.len() - 4..]));
+                tx.locktime = Some(LittleEndian::read_u32(&raw[raw.len() - 4..]));
                 tx
             } else {
                 Tx::parse(&mut Cursor::new(raw), testnet)?
@@ -523,9 +519,9 @@ impl TxFetcher {
         };
 
         tx.testnet = testnet;
-        self.cache.insert(tx_id, tx);
+        self.cache.insert(tx_id.clone(), tx.clone());
 
-        Ok(tx)
+        Ok(tx.clone())
     } 
 }
 
@@ -537,23 +533,22 @@ impl TxFetcher {
 #[cfg(test)]
 mod tx_test {
     use super::*;
-    use std::prelude::*;
 
 
     #[test]
     fn parsing_test() -> Result<(), Box<dyn Error>>{
-        let t1 = Tx::parse()?;
-        println!("{:?}", &t1);
+        // let t1 = Tx::parse()?;
+        // println!("{:?}", &t1);
         Ok(())
     }
 
     #[test]
     fn reqwest_get() -> Result<(), reqwest::Error> {
-        async {
-            let body = reqwest::get("https://www.rust-lang.org").await?;
-            let content = body.text().await?;
-            println!("{}", body);
-        };
+        // async {
+        //     let body = reqwest::get("https://www.rust-lang.org").await?;
+        //     let content = body.text().await?;
+        //     println!("{}", body);
+        // };
 
         Ok(())
     }

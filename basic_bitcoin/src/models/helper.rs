@@ -1,15 +1,16 @@
 //! collection of functions
 
-use std::io::{Read};
+use std::io::Read;
 use std::error::Error;
 use sha2::{Sha256, Digest};
 
 const BASE58_ALPHABET: &str = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 fn hash256(s: &[u8]) -> Vec<u8> {
-    let hasher = Sha256::new();
+    let mut hasher = Sha256::new();
     hasher.update(s);
-    hasher.update(hasher.finalize_reset());
+    let re_hasher = hasher.finalize_reset(); 
+    hasher.update(re_hasher);
 
     hasher.finalize().to_vec()
 }
@@ -100,7 +101,7 @@ pub fn u32_to_little_endian(input: u32, len: u8) -> Result<Vec<u8>, Box<dyn Erro
 ///                                     ->0xff6dc7ed3e60100000
 /// ```
 pub fn read_varint<R: Read>(reader: &mut R) -> Result<u64, std::io::Error> {
-    let mut buf = [0u8; 1];
+    let buf = [0u8; 1];
  
     reader.read_to_end(&mut buf.to_vec())?;
 

@@ -11,13 +11,13 @@ use crate::models::op::*;
 
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub enum Cmd {
     OpCode(u8),        
     BytesData(Vec<u8>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub struct Script {
     cmds: Vec<Cmd>,
 }
@@ -700,7 +700,7 @@ impl Add for Script {
 
 #[cfg(test)]
 mod test_script {
-    use super::*;
+    // use super::*;
 
     #[test]
     fn t_struct () {
