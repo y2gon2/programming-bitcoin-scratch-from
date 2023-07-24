@@ -170,6 +170,46 @@ mod op_test {
 
     #[test]
     fn creat_tx() {
+        use crate::models::helper::decode_base58;
+        use crate::models::script::Script;
+        use crate::models::tx::{Tx, TxIn, TxOut};
+        use hex;
+
+        let prev_tx_hex = "0d6fe5213c0b3291f208cba8bfb59b7476dffacc4e5cb66f6eb20a080843a299";
+        let prev_tx = hex::decode(prev_tx_hex).unwrap();
+        let prev_index = 13u32;
+
+        let tx_in = TxIn::new(prev_tx, prev_index, None, None);
+        // println!("{:?}", tx_in);
         
+        let _tx_outs = Vec::<TxOut>::new();
+        let change_amount: u64 = (0.33 * 100_000_000.0) as u64;
+
+        let change_h160 = decode_base58("mzx5YhAH9kNHtcN481u6WkjeHjYtVeKVh2").unwrap(); 
+        // println!("{:?}", change_h160);
+
+        let change_script = Script::p2pkh_script(change_h160);
+        // println!("{:?}", change_script);
+        let change_output = TxOut::new(change_amount, change_script);
+
+        let target_amount: u64 = (0.1 * 100_000_000.0) as u64;
+        let target_h160 = decode_base58("mnrVtF8DWjMu839VW3rBfgYaAfKk8983Xf").unwrap();
+        let target_script = Script::p2pkh_script(target_h160);
+        
+        let target_output = TxOut::new(target_amount, target_script);
+        let tx_obj = Tx::new(
+            1, 
+            Some(vec![tx_in]),
+            Some(vec![change_output, target_output]),
+            Some(0u32),
+            true,
+        ); 
+
+        println!("{}", tx_obj);
+    }
+
+    #[test]
+    fn priveate_key_test() {
+        // use crate::models::ecc::
     }
 }

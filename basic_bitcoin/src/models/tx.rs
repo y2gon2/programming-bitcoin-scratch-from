@@ -32,13 +32,14 @@ impl Tx {
         tx_ins: Option<Vec<TxIn>>, 
         tx_outs: Option<Vec<TxOut>>, 
         locktime: Option<u32>, 
+        testnet: bool
     ) -> Self {
         Self {
             version,
             tx_ins,
             tx_outs,
             locktime,
-            testnet: Tx::set_testnet_default(),
+            testnet,
         }
     }
 
@@ -65,6 +66,7 @@ impl Tx {
     // version - serialized bytes [u8; 4] array 를 입력받으면 
     // 이를 little endian 으로 parsing -> u32 로 변환하여 이를 version value 로 사용하는
     // Tx instance 생성
+    #[allow(unused_variables)]
     pub fn parse<R: Read>(reader: &mut R, testnet: bool) -> Result<Self, Box<dyn Error>>{
         
         // Stream 에서 version(4 bytes, little-endian) 읽기
@@ -233,7 +235,7 @@ impl Display for Tx {
 
         write!(
             f,
-            "tx: {}\nversion: {}\ntx_ins:\n{}tx_outs:\n{}locktime: {}",
+            "tx: {} {{\nversion: {}\ntx_ins:{}\ntx_outs:{}\nlocktime: {}\n}}",
             self.id().unwrap(), 
             self.version,
             tx_ins_string,
@@ -374,7 +376,7 @@ impl Display for TxIn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{}: {}",
+            "\n{}: {}",
             hex::encode(self.prev_tx.clone()), 
             self.prev_index,
         )
@@ -436,7 +438,7 @@ impl TxOut {
 
 impl Display for TxOut {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.amount, self.script_pubkey)
+        write!(f, "\n{}: {}", self.amount, self.script_pubkey)
     }
 }
 

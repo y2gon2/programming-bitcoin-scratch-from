@@ -3,7 +3,14 @@
 use std::io::Read;
 use std::error::Error;
 use sha2::{Sha256, Digest};
+use num::bigint::BigUint;
 
+#[allow(dead_code)]
+pub const SIGHASH_ALL: u64 = 1;
+#[allow(dead_code)]
+pub const SIGHASH_NONE: u64 = 2;
+#[allow(dead_code)]
+pub const SIGHASH_SINGLE: u64 = 3;
 const BASE58_ALPHABET: &str = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 fn hash256(s: &[u8]) -> Vec<u8> {
@@ -26,10 +33,11 @@ fn hash256(s: &[u8]) -> Vec<u8> {
 /// 
 /// fn encode_base58() : Base58 표현된 주소 문자열로부터 20bytes Hash 로 encode 
 pub fn decode_base58(s: &str) ->  Result<Vec<u8>, Box<dyn Error>> {
-    let mut num = 0u128;
+    let mut num  = BigUint::from(0u64);
+
     for c in s.chars() {
         match BASE58_ALPHABET.find(c) {
-            Some(x) => num = num * 58 + x as u128,
+            Some(x) => num = num * 58u64 + x as u64,
             None => return Err("Invalid character".into()),
         }
     }
@@ -40,7 +48,7 @@ pub fn decode_base58(s: &str) ->  Result<Vec<u8>, Box<dyn Error>> {
     // Payload : 주로 SHA-256 hash  + RIPEMD-160 hash 가 사용
     // Checksum: 데이터의 무결성을 확인하는데 사용하는 값
     //           Payload 와 Version Byte 에 double SHA-256 을 적용한 후, 첫 4bytes 를 사용
-    let combined: Vec<u8> = num.to_be_bytes()[..25].to_vec();
+    let combined: Vec<u8> = num.to_bytes_be()[..25].to_vec();
     let checksum = &combined[combined.len() - 4..];
     let real_checksum = &hash256(&combined[..combined.len() - 4])[..4];
     if checksum != real_checksum {

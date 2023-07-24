@@ -60,6 +60,7 @@ dependencies = [
  "hex",
  "log",
  "num",
+ "num-bigint",
  "num-traits",
  "rand",
  "reqwest",

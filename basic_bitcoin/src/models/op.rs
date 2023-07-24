@@ -1137,7 +1137,10 @@ pub fn decode_num(element:&Vec<u8>) -> i32 {
 
     let mut big_endian = element.clone();
     big_endian.reverse();
+
+    #[allow(unused_assignments)]
     let mut negative = true;
+    #[allow(unused_assignments)]
     let mut result = 0i32;
 
     if big_endian[0] & 0x80 != 0 {
