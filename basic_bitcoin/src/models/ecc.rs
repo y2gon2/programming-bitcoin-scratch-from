@@ -6,9 +6,7 @@ use std::fmt::Display;
 use std::ops::{Add, Sub, Mul,Div};
 
 use num_bigint::{BigInt, ToBigInt};
-use num_traits::{One, ToPrimitive};
-use num_traits::pow::Pow;
-use num_traits::identities::Zero;
+use num_traits::{One, Num, Zero, Pow, ToPrimitive, FromPrimitive};
 
 
 
@@ -785,5 +783,369 @@ mod ecc_test {
 }
 
 
+// ---------------------
+//     S256Field
+// ---------------------
 
-//------------------------------
+const A: i64 = 0;
+const B: i64 = 7;
+// P = 2.pow(256u16) - 2.pow(32u16) - 977i64
+const P: &str = "115792089237316195423570985008687907853269984665640564039457584007908834671663";
+const N: &str = "0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141";
+
+#[derive(Clone, Debug)]
+pub struct S256Field {
+    num: BigInt,
+    prime: BigInt,
+}
+
+impl S256Field {
+    pub fn new(num: &str) -> Self {
+        Self {
+            num: BigInt::from_str_radix(num, 16).unwrap(),
+            prime: BigInt::from_str_radix(P, 16).unwrap(),
+        }
+    }
+
+    pub fn new_bigint(num: BigInt) -> Self {
+        Self {
+            num,
+            prime: BigInt::from_str_radix(P, 16).unwrap(),
+        }
+    }
+
+    pub fn sqrt(&self) -> BigInt {
+        let calculation = (&self.prime + BigInt::one()) / 4;
+        self.num.modpow(&calculation, &self.prime)
+    }
+}
+
+impl Display for S256Field {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.num.to_str_radix(16))
+    }
+}
+
+impl PartialEq for S256Field {
+    fn eq(&self, other: &Self) -> bool {
+        if self.num == other.num && self.prime == other.prime { 
+            return true 
+        } else {
+            return false
+        }
+    }
+}
+
+impl Eq for S256Field {}
+
+impl Add for S256Field {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        if &self.prime != &rhs.prime {
+            panic!("Cannot add two numbers in different Fields");
+        }
+        let num = (self.num + rhs.num) % self.prime.clone();
+
+        return Self {
+            num,
+            prime: self.prime,
+        }
+    }       
+}
+
+impl<'a> Add<&'a S256Field> for &'a S256Field {
+    type Output = S256Field;
+
+    fn add(self, rhs: &'a S256Field) -> Self::Output {
+        if &self.prime != &rhs.prime {
+            panic!("Cannot add two numbers in different Fields");
+        }
+        let num = (self.num.clone() + rhs.num.clone()) % self.prime.clone();
+
+        return S256Field {
+            num,
+            prime: self.prime.clone(),
+        }
+    }
+}
+
+impl Sub for S256Field {
+    type Output = S256Field;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        if &self.prime != &rhs.prime {
+            panic!("Cannot subtract two numbers in different Fields");
+        }
+
+        let num = (self.num - rhs.num) % self.prime.clone();
+
+        return Self {
+            num,
+            prime: self.prime,
+        }
+    }
+}
+
+impl<'a> Sub<&'a S256Field> for&'a S256Field {
+    type Output = S256Field;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        if &self.prime != &rhs.prime {
+            panic!("Cannot subtract two numbers in different Fields");
+        }
+
+        let num = (self.num.clone() - rhs.num.clone()) % self.prime.clone();
+
+        return S256Field {
+            num,
+            prime: self.prime.clone(),
+        }
+    }
+}
+
+impl Mul for S256Field {
+    type Output = S256Field;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        if &self.prime != &rhs.prime {
+            panic!("Cannot multiply two numbers in different Fields");
+        }
+
+        let num = (self.num * rhs.num) % self.prime.clone();
+
+        return S256Field {
+            num,
+            prime: self.prime.clone(),
+        }
+    }
+}
+
+impl<'a> Mul<&'a S256Field> for&'a S256Field {
+    type Output = S256Field;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        if &self.prime != &rhs.prime {
+            panic!("Cannot multiply two numbers in different Fields");
+        }
+
+        let num = (self.num.clone() * rhs.num.clone()) % self.prime.clone();
+
+        return S256Field {
+            num,
+            prime: self.prime.clone(),
+        }
+    }
+}
+
+impl Div for S256Field {
+    type Output = S256Field;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        if &self.prime != &rhs.prime {
+            panic!("Cannot divide two numbers in different Fields");
+        }
+
+        let num = (
+            self.num 
+            * rhs.num.modpow(&(self.prime.clone() - BigInt::from_i8(2).unwrap()), &self.prime)) 
+            % self.prime.clone();
+
+        return S256Field {
+            num,
+            prime: self.prime,
+        }
+    }
+}
+
+impl<'a> Div<&'a S256Field> for&'a S256Field {
+    type Output = S256Field;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        if self.prime != rhs.prime {
+            panic!("Cannot divide two numbers in different Fields");
+        }
+
+        let num = (
+            self.num.clone() 
+            * rhs.num.modpow(&(self.prime.clone() - BigInt::from_i8(2).unwrap()), &self.prime)) 
+            % self.prime.clone();
+
+        return S256Field {
+            num,
+            prime: self.prime.clone(),
+        }
+    }
+}
+
+impl num_traits::pow::Pow<BigInt> for S256Field {
+    type Output = S256Field;
+    
+    fn pow(self, rhs: BigInt) -> Self::Output {
+        let n = rhs % (self.prime.clone() - BigInt::one());
+        let num = self.num.modpow(&n, &self.prime);
+
+        Self { 
+            num, 
+            prime: self.prime,
+        }
+    }
+}
+
+// ---------------------
+//     S256Point
+// ---------------------
+
+const G: S256Point = S256Point::new(
+    Some(S256Field::new("0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")),
+    Some(S256Field::new("0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8")),
+    None,
+    None,
+    );
+
+pub struct Signature {
+    r: &str,
+    s: &str,
+}
+
+#[derive(Clone, Debug)]
+pub struct S256Point {
+    x: Option<S256Field>,
+    y: Option<S256Field>,
+    a: Option<S256Field>,
+    b: Option<S256Field>,
+}
+
+impl S256Point {
+    pub fn new(x: Option<S256Field>, y: Option<S256Field>, a: Option<S256Field>, b: Option<S256Field>) -> Self {
+        Self { x, y, a, b }
+    }
+
+    // ex
+    // self.assertTrue(point.verify(z, Signature(r, s)))
+    // z = 0x7c076ff316692a3d7eb3c3bb0f8b1488cf72e1afcd929e29307032997a838a3d
+    // r = 0xeff69ef2b1bd93a66ed5219add4fb51e11a840f404876325a1e8ffe0529a2c
+    // s = 0xc7207fee197d27c618aea621406f6bf5ef6fca38681d82b2f06fddbdce6feab6
+    pub fn verify(&self, z: &str, sig: Signature ) -> bool {
+        let z_bigint = BigInt::from_str_radix(z, 16).unwrap();
+        let sig_r_bigint = BigInt::from_str_radix(sig.r,16).unwrap();
+        let sig_s_bigint = BigInt::from_str_radix(sig.s,16).unwrap();
+
+        let n = BigInt::from_str_radix(N, 16).unwrap();
+        let s_inv = sig_s_bigint.modpow(&(n - BigInt::from_u8(2).unwrap()), &n);
+
+        let u = z_bigint * s_inv % n;
+        let v = sig_r_bigint * s_inv % n;
+
+        let total = (G * u) + (self.clone() * v); 
+
+        return total.x.unwrap().num == sig_r_bigint;
+    }
+
+    fn sec(&self, compressed: bool) -> Vec<u8> {
+
+    }
+}
+
+impl PartialEq for S256Point {
+    fn eq(&self, other: &Self) -> bool {
+        if self.x == other.x && self.y == other.y && self.a == other.a && self.b && other.b {
+            return true
+        } else {
+            return false
+        }
+    }
+}
+
+impl Eq for S256Point {}
+
+impl Display for S256Point {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.x == None {
+            return write!(f, "S256Point(infinity)")
+        } 
+        write!(f, "S256Point({} {})", self.x.as_ref().unwrap(), self.y.as_ref().unwrap())
+    }
+}
+
+impl Add for S256Point {
+    type Output = S256Point;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        if &self.a != &rhs.a || &self.b != &rhs.b {
+            panic!("They are not on the same curve.")
+        } 
+
+        if *&self.x.is_none() {
+            return rhs.clone();
+        }
+
+        if *&rhs.x.is_none() {
+            return self.clone();
+        } 
+
+        if &self.x == &rhs.x && &self.y == &rhs.y {
+            return S256Point::new(None, None, self.a, self.b)
+        }
+
+        if &self.x != &rhs.x {
+            let s = (&rhs.y.unwrap() - &self.y.unwrap()) / (&rhs.x.unwrap() - &rhs.x.unwrap());
+            let x = s.clone().pow(BigInt::from_i32(2).unwrap()) - rhs.x.clone().unwrap();
+            let y = &(s.clone() * (&self.x.unwrap() - &x)) - &self.y.unwrap();
+            
+            return S256Point::new(Some(x), Some(y), self.a, self.b);
+        }
+
+        if &self == &rhs 
+        && &self.y.unwrap() == &(S256Field::new_bigint(BigInt::zero()) * self.x.clone().unwrap()) {
+            return S256Point::new(None, None, self.a, self.b)
+        }   
+
+        if &self == &rhs {
+            let s = (
+                S256Field::new_bigint(BigInt::from_i8(3).unwrap()) 
+                * self.x.clone().unwrap().pow(BigInt::from_i8(2).unwrap())
+                + self.a.clone().unwrap()
+                ) / (
+                S256Field::new_bigint(BigInt::from_i8(2).unwrap()) 
+                * self.y.clone().unwrap()
+                );
+            let x = s.clone().pow(BigInt::from_i8(2).unwrap()) - (S256Field::new_bigint(BigInt::from_i8(2).unwrap()) * self.x.clone().unwrap());
+            let y = s * (&self.x.unwrap() -  &x) - self.y.clone().unwrap();
+
+            return S256Point::new(Some(x), Some(y), self.a, self.b);
+        }
+        panic!("Out of Case")
+    }
+}
+
+impl Mul<BigInt> for S256Point {
+    type Output = Self;
+
+    fn mul(self, coefficient: BigInt) -> Self::Output {
+        let mut coef = coefficient % BigInt::from_str_radix(N, 16).unwrap();
+
+        // 안될거 같은데... 
+        let mut current = self.clone();
+        let mut result = S256Point::new(None, None, self.a.clone(), self.b.clone());
+
+        while coef != BigInt::zero() {
+            if coef & BigInt::one() == BigInt::one() {
+                result = result + current;
+            }
+            current = current + current;
+            coef >>= 1;
+        }
+        result 
+    }
+}
+
+#[cfg(test)]
+mod s256_test {
+    use super::*;
+
+    #[test]
+    fn test_ne() {
+        let a = S256Field::new()
+    }
+}
