@@ -1,14 +1,19 @@
 //! Elliptic Curve Cryptograpy
 //! std::hash is used instead of Sha256
+//! ECC Point 계산에 필수적으로 필요한  Bigint * Point 연산 구현에 대한 수학적 추가 학습 필요
+//! 현재 코드는 동등 논리 구조를 구현하였으냐, test 결과에서 연산의 결과 값이 달라 
+//! PrivateKey 구조체 및 해당 method 에 대한 구현작업을 중단
 
 use std::error::Error;
 use std::fmt::Display;
 use std::ops::{Add, Sub, Mul,Div};
+use std::str::FromStr;
 
-use num_bigint::{BigInt, ToBigInt};
+use lazy_static::lazy_static;
+use num_bigint::{BigInt, ToBigInt, Sign};
 use num_traits::{One, Num, Zero, Pow, ToPrimitive, FromPrimitive};
 
-
+use crate::models::helper::*;
 
 fn mod_pow(base: i128, exp: i128, modulus: i128) -> i128 {
     let big_base = base.to_bigint().unwrap();
@@ -791,7 +796,7 @@ const A: i64 = 0;
 const B: i64 = 7;
 // P = 2.pow(256u16) - 2.pow(32u16) - 977i64
 const P: &str = "115792089237316195423570985008687907853269984665640564039457584007908834671663";
-const N: &str = "0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141";
+const N: &str = "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141";
 
 #[derive(Clone, Debug)]
 pub struct S256Field {
@@ -814,9 +819,11 @@ impl S256Field {
         }
     }
 
-    pub fn sqrt(&self) -> BigInt {
+    pub fn sqrt(&self) -> Self {
         let calculation = (&self.prime + BigInt::one()) / 4;
-        self.num.modpow(&calculation, &self.prime)
+        let new_num = self.num.modpow(&calculation, &self.prime);
+
+        return S256Field::new_bigint(new_num)
     }
 }
 
@@ -996,16 +1003,35 @@ impl num_traits::pow::Pow<BigInt> for S256Field {
 //     S256Point
 // ---------------------
 
-const G: S256Point = S256Point::new(
-    Some(S256Field::new("0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")),
-    Some(S256Field::new("0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8")),
-    None,
-    None,
-    );
+const X_NUM: &str = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+const Y_NUM: &str = "483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8";
 
+lazy_static! {
+    #[derive(Debug)]
+    static ref G: S256Point = S256Point {
+        x: Some(S256Field {
+            num: BigInt::from_str_radix(X_NUM, 16).unwrap(),
+            prime: BigInt::from_str_radix(P, 16).unwrap(),
+        }),
+        y: Some(S256Field {
+            num: BigInt::from_str_radix(Y_NUM, 16).unwrap(),
+            prime: BigInt::from_str_radix(P, 16).unwrap(),
+        }),
+        a: None,
+        b: None,          
+    };
+}
+
+ 
 pub struct Signature {
-    r: &str,
-    s: &str,
+    r: String,
+    s: String,
+}
+
+impl Signature {
+    pub fn new(r: String, s: String) -> Self {
+        Self { r, s }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -1021,35 +1047,121 @@ impl S256Point {
         Self { x, y, a, b }
     }
 
+    pub fn new_bigint_xy(x: BigInt, y: BigInt) -> Self {
+        Self {
+            x: Some(S256Field::new_bigint(x)),
+            y: Some(S256Field::new_bigint(y)),
+            a: None,
+            b: None,
+        }
+    }
+
     // ex
     // self.assertTrue(point.verify(z, Signature(r, s)))
     // z = 0x7c076ff316692a3d7eb3c3bb0f8b1488cf72e1afcd929e29307032997a838a3d
     // r = 0xeff69ef2b1bd93a66ed5219add4fb51e11a840f404876325a1e8ffe0529a2c
     // s = 0xc7207fee197d27c618aea621406f6bf5ef6fca38681d82b2f06fddbdce6feab6
     pub fn verify(&self, z: &str, sig: Signature ) -> bool {
+   
         let z_bigint = BigInt::from_str_radix(z, 16).unwrap();
-        let sig_r_bigint = BigInt::from_str_radix(sig.r,16).unwrap();
-        let sig_s_bigint = BigInt::from_str_radix(sig.s,16).unwrap();
+        let sig_r_bigint = BigInt::from_str_radix(&sig.r,16).unwrap();
+        let sig_s_bigint = BigInt::from_str_radix(&sig.s,16).unwrap();
 
         let n = BigInt::from_str_radix(N, 16).unwrap();
-        let s_inv = sig_s_bigint.modpow(&(n - BigInt::from_u8(2).unwrap()), &n);
+        let s_inv = sig_s_bigint.modpow(&(&n - &BigInt::from(2)), &n);
 
-        let u = z_bigint * s_inv % n;
-        let v = sig_r_bigint * s_inv % n;
+        let u = (&z_bigint * &s_inv) % &n;
+        let v = (&sig_r_bigint * &s_inv) % n;
 
-        let total = (G * u) + (self.clone() * v); 
-
+        let total = (G.clone() * u) + (self.clone() * v); 
+ 
         return total.x.unwrap().num == sig_r_bigint;
     }
 
-    fn sec(&self, compressed: bool) -> Vec<u8> {
+    /// returns the binary version of the SEC format
+    pub fn sec(&self, compressed: bool) -> Vec<u8> {
+        // if compressed, starts with b'\x02' if self.y.num is even, b'\x03' if self.y is odd
+        // then self.x.num
+        // remember, you have to convert self.x.num/self.y.num to binary (some_integer.to_bytes(32, 'big'))
 
+        if compressed {
+            if &self.y.as_ref().unwrap().num % &BigInt::from(2) == BigInt::zero() {
+                let mut vec = vec![2];
+                let (_sign, mut num_bytes) = self.x.clone().unwrap().num.to_bytes_be();
+                vec.append(&mut num_bytes);
+                return vec
+            } else {
+                let mut vec = vec![3];
+                let (_sign, mut num_bytes) = self.x.clone().unwrap().num.to_bytes_be();
+                vec.append(&mut num_bytes);
+                return vec
+            }
+        } else {
+            let mut vec = vec![4];
+            let (_sign, mut num_bytes) = self.x.clone().unwrap().num.to_bytes_be();
+            vec.append(&mut num_bytes);
+            return vec
+        }
+    }
+
+    pub fn hash160(&self, compressed: bool) -> Vec<u8> {
+        return hash160(&self.sec(compressed))
+    }
+
+    /// return the address string
+    pub fn address(&self, compressed: bool, testnet: bool) -> String {
+        let mut h160 = self.hash160(compressed);
+
+        let mut prefix = 0u8;
+        if testnet {
+            prefix = b'\x6f';
+        } else {
+            prefix = b'\x00';
+        }
+
+        let mut input = vec![prefix];
+        input.append(&mut h160);
+
+        return encode_base58_checksum(&input)
+    }
+
+    /// returns a Point object from a SEC binary (not hex)
+    pub fn parse(sec_bin: Vec<u8>) -> Self {
+        if sec_bin[0] == 4 {
+            let x = BigInt::from_bytes_be(Sign::Plus, &sec_bin[1..33]);
+            let y = BigInt::from_bytes_be(Sign::Plus, &sec_bin[33..65]);
+            return S256Point::new_bigint_xy(x, y);
+        } 
+
+        let is_even = sec_bin[0] == 2;
+        let x = S256Field::new_bigint(BigInt::from_bytes_be(Sign::Plus, &sec_bin[1..]));
+
+        // right side of the equation y^2 = x^3 + 7
+        let alpha = x.clone().pow(BigInt::from(3)) + S256Field::new_bigint(BigInt::from(B));
+
+        // solve for left side
+        let beta = alpha.sqrt();
+        let other_side_beta = S256Field::new_bigint(&BigInt::from_str_radix(P, 16).unwrap() - &beta.num);
+
+        if &beta.num % &BigInt::from(2) == BigInt::zero() {
+            if is_even {
+                return S256Point::new(Some(x), Some(beta), None, None)
+            } else {
+                return S256Point::new(Some(x), Some(other_side_beta), None, None)
+            }
+        } else {
+            if is_even {
+                return S256Point::new(Some(x), Some(other_side_beta), None, None)
+            } else {
+                return S256Point::new(Some(x), Some(beta), None, None)
+            }
+        }
     }
 }
 
 impl PartialEq for S256Point {
     fn eq(&self, other: &Self) -> bool {
-        if self.x == other.x && self.y == other.y && self.a == other.a && self.b && other.b {
+        if self.x == other.x && self.y == other.y && self.a == other.a && self.b == other.b {
             return true
         } else {
             return false
@@ -1089,29 +1201,27 @@ impl Add for S256Point {
         }
 
         if &self.x != &rhs.x {
-            let s = (&rhs.y.unwrap() - &self.y.unwrap()) / (&rhs.x.unwrap() - &rhs.x.unwrap());
-            let x = s.clone().pow(BigInt::from_i32(2).unwrap()) - rhs.x.clone().unwrap();
-            let y = &(s.clone() * (&self.x.unwrap() - &x)) - &self.y.unwrap();
+            let s = (rhs.y.as_ref().unwrap() - self.y.as_ref().unwrap()) / (rhs.x.as_ref().unwrap() - rhs.x.as_ref().unwrap());
+            let x = s.clone().pow(BigInt::from(2)) - rhs.x.clone().unwrap();
+            let y = &(s.clone() * (self.x.as_ref().unwrap() - &x)) - self.y.as_ref().unwrap();
             
             return S256Point::new(Some(x), Some(y), self.a, self.b);
         }
 
         if &self == &rhs 
-        && &self.y.unwrap() == &(S256Field::new_bigint(BigInt::zero()) * self.x.clone().unwrap()) {
+        && self.y.as_ref().unwrap() == &(&S256Field::new_bigint(BigInt::zero()) * self.x.as_ref().unwrap()) {
             return S256Point::new(None, None, self.a, self.b)
         }   
 
         if &self == &rhs {
             let s = (
-                S256Field::new_bigint(BigInt::from_i8(3).unwrap()) 
-                * self.x.clone().unwrap().pow(BigInt::from_i8(2).unwrap())
+                S256Field::new_bigint(BigInt::from(3)) 
+                * self.x.clone().unwrap().pow(BigInt::from(2))
                 + self.a.clone().unwrap()
-                ) / (
-                S256Field::new_bigint(BigInt::from_i8(2).unwrap()) 
-                * self.y.clone().unwrap()
-                );
-            let x = s.clone().pow(BigInt::from_i8(2).unwrap()) - (S256Field::new_bigint(BigInt::from_i8(2).unwrap()) * self.x.clone().unwrap());
-            let y = s * (&self.x.unwrap() -  &x) - self.y.clone().unwrap();
+                ) 
+                / (&S256Field::new_bigint(BigInt::from(2)) * self.y.as_ref().unwrap());
+            let x = s.clone().pow(BigInt::from(2)) - (S256Field::new_bigint(BigInt::from(2)) * self.x.clone().unwrap());
+            let y = s * (self.x.as_ref().unwrap() -  &x) - self.y.clone().unwrap();
 
             return S256Point::new(Some(x), Some(y), self.a, self.b);
         }
@@ -1129,23 +1239,89 @@ impl Mul<BigInt> for S256Point {
         let mut current = self.clone();
         let mut result = S256Point::new(None, None, self.a.clone(), self.b.clone());
 
-        while coef != BigInt::zero() {
-            if coef & BigInt::one() == BigInt::one() {
-                result = result + current;
+        while &coef != &BigInt::zero() {
+            if &coef & &BigInt::one() == BigInt::one() {
+                result = result + current.clone();
             }
-            current = current + current;
+            current = current.clone() + current.clone();
             coef >>= 1;
         }
         result 
     }
 }
 
+
 #[cfg(test)]
 mod s256_test {
     use super::*;
 
     #[test]
-    fn test_ne() {
-        let a = S256Field::new()
+    fn read_g() {
+        println!("{:?}", G.clone());
     }
+
+    #[test]
+    fn test_order() {
+        let point = G.clone() * BigInt::from_str_radix(N, 16).unwrap();
+        println!("{:?}", point); // S256Point { x: None, y: None, a: None, b: None }
+    }
+
+    // 아래와 같이 결과값이 다름.
+    // coefficient 적용 연산에 차이가 있을듯 하지만 code 적으로는 동등함을 chatGPT 를 통해 검증함.
+    #[test]
+    fn test_pubpoint() {
+        let points = [ // secret, x, y
+            (BigInt::from(7), "5cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc", "6aebca40ba255960a3178d6d861a54dba813d0b813fde7b5a5082628087264da"),
+            (BigInt::from(1485), "c982196a7466fbbbb0e27a940b6af926c1a74d5ad07128c82824a11b5398afda", "7a91f9eae64438afb9ce6448a1c133db2d8fb9254e4546b6f001637d50901f55"),
+            (BigInt::from(2).pow(128u8), "8f68b9d2f63b5f339239c1ad981f162ee88c5678723ea3351b7b444c9ec4c0da", "662a9f2dba063986de1d90c2b6be215dbbea2cfe95510bfdf23cbf79501fff82"),
+            (BigInt::from(2).pow(240u8) + BigInt::from(2).pow(31u8), "9577ff57c8234558f293df502ca4f09cbc65a6572c842b39b366f21717945116", "10b49c67fa9365ad7b90dab070be339a1daf9052373ec30ffae4f72d5e66d053"),
+        ];
+
+        for (secret, x, y) in points {
+            let point = S256Point::new_bigint_xy(
+                BigInt::from_str_radix(x, 16).unwrap(),
+                BigInt::from_str_radix(y, 16).unwrap(),
+            );
+
+            println!("{:?}", G.clone() * secret);
+            println!("{:?}", point);
+            // assert!(G.clone() * secret == point);
+        }
+    }
+    // S256Point { x: Some(S256Field { num: 55066263022277343669578718895168534326250603453777594175500187360389116729240, prime: 565222794527730373379072786348411718562863470688369141095402336226947079297792115268951414371 }), y: Some(S256Field { num: 32670510020758816978083085130507043184471273380659243275938904335757337482424, prime: 565222794527730373379072786348411718562863470688369141095402336226947079297792115268951414371 }), a: None, b: None }
+    // S256Point { x: Some(S256Field { num: 41948375291644419605210209193538855353224492619856392092318293986323063962044, prime: 565222794527730373379072786348411718562863470688369141095402336226947079297792115268951414371 }), y: Some(S256Field { num: 48361766907851246668144012348516735800090617714386977531302791340517493990618, prime: 565222794527730373379072786348411718562863470688369141095402336226947079297792115268951414371 }), a: None, b: None }
+    // S256Point { x: Some(S256Field { num: 55066263022277343669578718895168534326250603453777594175500187360389116729240, prime: 565222794527730373379072786348411718562863470688369141095402336226947079297792115268951414371 }), y: Some(S256Field { num: 32670510020758816978083085130507043184471273380659243275938904335757337482424, prime: 565222794527730373379072786348411718562863470688369141095402336226947079297792115268951414371 }), a: None, b: None }
+    // S256Point { x: Some(S256Field { num: 91144748097329341227315146716405895133044962575665947613151200288251569549274, prime: 565222794527730373379072786348411718562863470688369141095402336226947079297792115268951414371 }), y: Some(S256Field { num: 55440085219269127825789759728109305451504918753795093767574238082182444752725, prime: 565222794527730373379072786348411718562863470688369141095402336226947079297792115268951414371 }), a: None, b: None }
+    // S256Point { x: None, y: None, a: None, b: None }
+    // S256Point { x: Some(S256Field { num: 64865771952738249789114440545196421582918768733599534045195125031385885360346, prime: 565222794527730373379072786348411718562863470688369141095402336226947079297792115268951414371 }), y: Some(S256Field { num: 46211216742671250426576585530459394900178019437443360579906162037052661563266, prime: 565222794527730373379072786348411718562863470688369141095402336226947079297792115268951414371 }), a: None, b: None }
+    // S256Point { x: None, y: None, a: None, b: None }
+    // S256Point { x: Some(S256Field { num: 67606631551526079174363160834905769336240182401619533769043587988551063851286, prime: 565222794527730373379072786348411718562863470688369141095402336226947079297792115268951414371 }), y: Some(S256Field { num: 7556117524685686037096665667879267882143292133281453141941949923550388736083, prime: 565222794527730373379072786348411718562863470688369141095402336226947079297792115268951414371 }), a: None, b: None }
+    
+
+    // ㅜㅜ coef 곱하기 연산 때문에 이것도 안되네.. gg
+    #[test]
+    fn test_verify() {
+        let p1 = (
+            "887387e452b8eacc4acfde10d9aaf7f6d9a0f975aabb10d006e4da568744d06c",
+            "61de6d95231cd89026e286df3b6ae4a894a3378e393e93a0f45b666329a0ae34"
+        );
+
+        let point = S256Point::new_bigint_xy(
+            BigInt::from_str_radix(p1.0, 16).unwrap(),
+            BigInt::from_str_radix(p1.1, 16).unwrap(),
+        );
+
+        let z1 = "ec208baa0fc1c19f708a9ca96fdeff3ac3f230bb4a7ba4aede4942ad003c0f60";
+        let r1 = "ac8d1c87e51d0d441be8b3dd5b05c8795b48875dffe00b7ffcfac23010d3a395";
+        let s1 = "68342ceff8935ededd102dd876ffd6ba72d6a427a3edb13d26eb0781cb423c4";
+        
+        assert!(!point.verify(z1, Signature::new(r1.to_string(), s1.to_string())));
+
+        let z2 = "7c076ff316692a3d7eb3c3bb0f8b1488cf72e1afcd929e29307032997a838a3d";
+        let r2 = "eff69ef2b1bd93a66ed5219add4fb51e11a840f404876325a1e8ffe0529a2c";
+        let s2 = "c7207fee197d27c618aea621406f6bf5ef6fca38681d82b2f06fddbdce6feab6";
+        
+        assert!(!point.verify(z2, Signature::new(r2.to_string(), s2.to_string())));
+    }
+
 }

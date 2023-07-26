@@ -2,8 +2,12 @@
 
 use std::io::Read;
 use std::error::Error;
+use std::iter::repeat;
 use sha2::{Sha256, Digest};
-use num::bigint::BigUint;
+use num::bigint::{BigUint, ToBigUint};
+use num::Integer;
+use num_traits::{ToPrimitive, Zero};
+use ripemd::Ripemd160;
 
 #[allow(dead_code)]
 pub const SIGHASH_ALL: u64 = 1;
@@ -13,13 +17,65 @@ pub const SIGHASH_NONE: u64 = 2;
 pub const SIGHASH_SINGLE: u64 = 3;
 const BASE58_ALPHABET: &str = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
-fn hash256(s: &[u8]) -> Vec<u8> {
+
+pub fn hash160(s: &Vec<u8>) -> Vec<u8> {
+    let mut hasher_sha256 = Sha256::new();
+    hasher_sha256.update(s);
+
+    let mut hasher_ripemd160 = Ripemd160::new();
+    hasher_ripemd160.update(hasher_sha256.finalize_reset());
+    
+    let hasher160 = hasher_ripemd160.finalize().to_vec();
+
+    hasher160
+}
+
+pub fn hash256(s: &Vec<u8>) -> Vec<u8> {
     let mut hasher = Sha256::new();
     hasher.update(s);
     let re_hasher = hasher.finalize_reset(); 
     hasher.update(re_hasher);
 
     hasher.finalize().to_vec()
+}
+
+/// Base58 표현된 주소 Vec 에서  20bytes Hash 로 encode 
+pub fn encode_base58(s: &Vec<u8>) -> String {
+    let mut count = 0usize;
+
+    // determine how many 0 bytes (b'\x00') s starts with
+    // 입력받는 주소의 앞부분에 version 정보가 있으며, 이때 그 정보가 '0' 으로 표시될 수 있다.
+    // 그런데 bytes array 를 ascii code 로 치환하는 과정에서 b'\x00' 은  ascii Null 을 의미하므로 
+    // 무시되거나 종료의 의미르 가지므로 오류를 발생시킬 수 있다. 
+    // 따라서 Base58 변환, Bitcoin 처리에서 b'\x00' 은 '1'로 표현한다.
+    for c in s.iter() {
+        if c == &0 {
+            count += 1;
+        } else {
+            break;
+        }
+    }
+
+    // convert to big endian integer
+    let mut num = BigUint::from_bytes_be(s);
+    let mut result = String::new();
+
+    // 58 로 나누어 그 나머지는 해당 자리의 표현 문자로 치환하고, 몫은 반복하여 58 로 나눔
+    while num > BigUint::zero() {
+        let div_rem = num.div_rem(&58i32.to_biguint().unwrap());
+        num = div_rem.0;
+        result.insert(0, BASE58_ALPHABET.chars().nth(div_rem.1.to_usize().unwrap()).unwrap());
+    }
+    result.insert_str(0, &repeat('1').take(count).collect::<String>());
+    result
+}
+
+pub fn encode_base58_checksum(s: &Vec<u8>) -> String {
+    let mut s_clone = s.clone();
+    let mut hash256 = hash256(&s);
+    s_clone.append(&mut hash256);
+
+    return encode_base58(&s_clone);
 }
 
 /// base58 이란?
@@ -31,7 +87,6 @@ fn hash256(s: &[u8]) -> Vec<u8> {
 ///
 ///  - BASE58_ALPHABET: 123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz
 /// 
-/// fn encode_base58() : Base58 표현된 주소 문자열로부터 20bytes Hash 로 encode 
 pub fn decode_base58(s: &str) ->  Result<Vec<u8>, Box<dyn Error>> {
     let mut num  = BigUint::from(0u64);
 
@@ -50,13 +105,15 @@ pub fn decode_base58(s: &str) ->  Result<Vec<u8>, Box<dyn Error>> {
     //           Payload 와 Version Byte 에 double SHA-256 을 적용한 후, 첫 4bytes 를 사용
     let combined: Vec<u8> = num.to_bytes_be()[..25].to_vec();
     let checksum = &combined[combined.len() - 4..];
-    let real_checksum = &hash256(&combined[..combined.len() - 4])[..4];
+    let real_checksum = &hash256(&combined[..combined.len() - 4].to_vec())[..4];
     if checksum != real_checksum {
         return Err("Bad address".into())
     }
 
     Ok(combined[1..combined.len() - 4].to_vec())
 }
+
+
 
 
 

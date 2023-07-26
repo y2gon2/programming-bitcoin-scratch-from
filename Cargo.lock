@@ -58,6 +58,7 @@ dependencies = [
  "bincode",
  "byteorder",
  "hex",
+ "lazy_static",
  "log",
  "num",
  "num-bigint",
