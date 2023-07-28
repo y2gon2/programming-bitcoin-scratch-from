@@ -18,6 +18,21 @@ pub const SIGHASH_SINGLE: u64 = 3;
 const BASE58_ALPHABET: &str = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 
+/// Turns bits into a target (large 256-bit integer)
+pub fn bits_to_target(bits: [u8; 4]) -> BigUint {
+    // last byte is exponent.
+    let exponent = bits[3] as u32;
+
+    // the first three bytes are the coefficient in little endian
+    let mut coef_bytes = [0u8; 4];
+    coef_bytes[0..3].copy_from_slice(&bits[0..3]);
+    let coefficient = BigUint::from(u32::from_le_bytes(coef_bytes));
+
+    println!("exponent: {}, coef: {}", exponent, coefficient);
+    // The formula : coefficient * 256**(exponent-3)
+    return coefficient * BigUint::from(256u32).pow(exponent - 3)
+}
+
 pub fn hash160(s: &Vec<u8>) -> Vec<u8> {
     let mut hasher_sha256 = Sha256::new();
     hasher_sha256.update(s);
@@ -238,4 +253,82 @@ mod hleper_test {
         println!("num3: {}", num3);
         println!("num4: {}", num4);
     }
+
+    #[test]
+    fn test_bits_to_target() {
+        let bits_str = "e9 3c 01 18";
+        let bits_vec: Vec<u8> = bits_str
+            .split_ascii_whitespace()
+            .map(|c| u8::from_str_radix(c, 16).unwrap())
+            .collect();
+
+        println!("{:?}", &bits_vec);
+
+        let bits = match bits_vec.try_into() {
+            Ok(bits) => bits,
+            Err(_) => panic!("Vec length not equal to array length!"),
+        };
+        
+        let result = bits_to_target(bits);
+
+        println!("{:2x}", result);
+        // 13ce9000000000000000000000000000000000000000000
+    }
+
+    #[test]
+    fn biguint_t () {
+        let exponent = 24 as u32;
+        let coefficient = BigUint::from(81129 as u32);
+
+
+        println!("{:2x}", coefficient * (BigUint::from(256u32).pow(exponent - 3))); 
+        // 13ce9000000000000000000000000000000000000000000
+        // 13ce9000000000000000000000000000000000000000000
+
+    }
+
+    #[test]
+    fn pow_test() {
+        let th = BigUint::from(3u32);
+        let two = BigUint::from(2u32);
+        let t = BigUint::from(256u32);
+        println!("{}", two.clone() * t.pow(2u32));
+    }
+
+    #[test]
+    fn h256_test() {
+        let bits_str = "e9 3c 01 18";
+        let bits_vec: Vec<u8> = bits_str
+            .split_ascii_whitespace()
+            .map(|c| u8::from_str_radix(c, 16).unwrap())
+            .collect();
+
+        let bits = match bits_vec.try_into() {
+            Ok(bits) => bits,
+            Err(_) => panic!("Vec length not equal to array length!"),
+        };
+        
+        let target = bits_to_target(bits);
+
+        let hex_str = "020000208ec39428b17323\
+        fa0ddec8e887b4a7c53b8c0a0a220cfd0000000000000000005b0750fce0a889502d40508d3957\
+        6821155e9c9e3f5c3157f961db38fd8b25be1e77a759e93c0118a4ffd71d";
+        
+        let hex_v = hex_str
+            .as_bytes()
+            .chunks(2)
+            .map(|ch| {
+                let s = std::str::from_utf8(ch).unwrap();
+                u8::from_str_radix(s, 16).unwrap()
+            })
+            .collect::<Vec<_>>();
+
+        let hash = hash256(&hex_v);
+        let proof = BigUint::from_bytes_le(&hash);
+
+        println!("target        : {:2x}", target);
+        println!("proof         : {:2x}", proof);
+        println!("proof < target: {}", proof < target);
+    }
 }
+
