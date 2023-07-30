@@ -17,6 +17,16 @@ pub const SIGHASH_NONE: u64 = 2;
 pub const SIGHASH_SINGLE: u64 = 3;
 const BASE58_ALPHABET: &str = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
+/// &str to Vec<u8>
+pub fn str_to_vec_u8(input: &str) -> Vec<u8> {
+    let v: Vec<u8> = (0..input.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&input[i..i + 2], 16).unwrap())
+        .collect();
+
+    return v
+}
+
 
 /// Turns bits into a target (large 256-bit integer)
 pub fn bits_to_target(bits: [u8; 4]) -> BigUint {
@@ -28,7 +38,8 @@ pub fn bits_to_target(bits: [u8; 4]) -> BigUint {
     coef_bytes[0..3].copy_from_slice(&bits[0..3]);
     let coefficient = BigUint::from(u32::from_le_bytes(coef_bytes));
 
-    println!("exponent: {}, coef: {}", exponent, coefficient);
+    // println!("exponent: {}, coef: {}", exponent, coefficient);
+
     // The formula : coefficient * 256**(exponent-3)
     return coefficient * BigUint::from(256u32).pow(exponent - 3)
 }
@@ -289,7 +300,6 @@ mod hleper_test {
 
     #[test]
     fn pow_test() {
-        let th = BigUint::from(3u32);
         let two = BigUint::from(2u32);
         let t = BigUint::from(256u32);
         println!("{}", two.clone() * t.pow(2u32));
@@ -326,9 +336,12 @@ mod hleper_test {
         let hash = hash256(&hex_v);
         let proof = BigUint::from_bytes_le(&hash);
 
-        println!("target        : {:2x}", target);
+        println!("target        : {:2x}", target); 
         println!("proof         : {:2x}", proof);
         println!("proof < target: {}", proof < target);
+        //target        : 13ce9000000000000000000000000000000000000000000
+        //proof         : 7e9e4c586439b0cdbe13b1370bdd9435d76a644d047523
+        //proof < target: true
     }
 }
 
