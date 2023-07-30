@@ -7,7 +7,6 @@
 use std::error::Error;
 use std::fmt::Display;
 use std::ops::{Add, Sub, Mul,Div};
-use std::str::FromStr;
 
 use lazy_static::lazy_static;
 use num_bigint::{BigInt, ToBigInt, Sign};
