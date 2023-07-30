@@ -8,6 +8,7 @@ use num::bigint::{BigUint, ToBigUint};
 use num::Integer;
 use num_traits::{ToPrimitive, Zero};
 use ripemd::Ripemd160;
+use lazy_static::lazy_static;
 
 #[allow(dead_code)]
 pub const SIGHASH_ALL: u64 = 1;
@@ -16,6 +17,13 @@ pub const SIGHASH_NONE: u64 = 2;
 #[allow(dead_code)]
 pub const SIGHASH_SINGLE: u64 = 3;
 const BASE58_ALPHABET: &str = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+const TWO_WEEKS: u32 = 60 * 60 * 24 * 14;
+
+lazy_static! {
+    pub static ref MAX_TRAGET: BigUint = BigUint::from(0xffffu32) * BigUint::from(256u32).pow(0x1du32 - 3); 
+}
+
 
 /// &str to Vec<u8>
 pub fn str_to_vec_u8(input: &str) -> Vec<u8> {
@@ -43,6 +51,65 @@ pub fn bits_to_target(bits: [u8; 4]) -> BigUint {
     // The formula : coefficient * 256**(exponent-3)
     return coefficient * BigUint::from(256u32).pow(exponent - 3)
 }
+
+/// Turns a target integer back into bits, which is 4 bytes
+pub fn target_to_bits(target: BigUint) -> [u8; 4] {
+    let mut raw_bytes = target.to_bytes_be();
+    
+    // 앞에 오는 0x00 byte 를 제거
+    while let Some(&0) = raw_bytes.first() {
+        raw_bytes.remove(0);
+    }
+
+    let mut exponent = raw_bytes.len() as u8;
+    let mut coefficient: Vec<u8>;
+
+    if raw_bytes[0] > 0x7f {
+        // 해당 byte 값이 0111 1111 보다 크다면, 해당 숫자의 최상단 bit 의 값이 1임을 의미
+        // 이는 곧 음수임을 의미하는데, 결과값 target 은 항상 양수이어야만 한다. 
+        // 따라서 앞에서 제거된 0을 다시 추가하여 양수로 만들어줘야 한다.  
+        exponent += 1;
+        coefficient = vec![0];
+        coefficient.extend_from_slice(&raw_bytes[..2]); 
+    } else {
+        // 정상적으로 양수의 범위만 남았다면 그대로 coefficient 로 취해준다. 
+        coefficient = raw_bytes[..3].to_vec();
+    }
+
+    coefficient.reverse();
+
+    let mut bits = [0u8; 4];
+    bits[3] = exponent;
+
+    for i in 0..3 {
+        bits[i] = coefficient[i];
+    }
+    
+    return bits
+}
+
+/// Calculates the new bits given a 2016-block time differentail and the previous bits
+///
+/// time_differential = (난이도 조정 기간의 마지막 block timestamp) 
+///                     - (난이도 조정기간의 첫번째 block timestamp)
+/// 
+/// new_target = previous_target * time_differential / 1_209_600 (2주간의 초 단위 시간) 
+pub fn calculate_new_bits(previous_bits: [u8; 4], mut time_differential: u32) -> [u8; 4] {
+    
+    // 제한 범위 : 3.5 일  <= time_differential <= 8주
+    if time_differential > (TWO_WEEKS * 4) { time_differential = TWO_WEEKS * 4; }
+    if time_differential < (TWO_WEEKS / 4) { time_differential = TWO_WEEKS / 4; }
+
+    // new target = previous target * time differential / two weeks
+    let mut new_target = bits_to_target(previous_bits) 
+        * BigUint::from(time_differential) 
+        / BigUint::from(TWO_WEEKS); 
+        
+    if &new_target > &MAX_TRAGET { new_target = MAX_TRAGET.clone(); }
+
+    return target_to_bits(new_target)
+}
+
 
 pub fn hash160(s: &Vec<u8>) -> Vec<u8> {
     let mut hasher_sha256 = Sha256::new();
@@ -103,6 +170,7 @@ pub fn encode_base58_checksum(s: &Vec<u8>) -> String {
 
     return encode_base58(&s_clone);
 }
+
 
 /// base58 이란?
 /// 
@@ -249,6 +317,8 @@ pub fn encode_varint(input: u32) -> Result<Vec<u8>, Box<dyn Error>> {
 
 #[cfg(test)]
 mod hleper_test {
+    use num_traits::Num;
+
     use super::*;
 
     #[test]
@@ -284,6 +354,42 @@ mod hleper_test {
 
         println!("{:2x}", result);
         // 13ce9000000000000000000000000000000000000000000
+    }
+
+    #[test]
+    fn test_target_to_bits() {
+        let bignum_str = "13ce9000000000000000000000000000000000000000000";
+        let target = BigUint::from_str_radix(bignum_str, 16).unwrap();
+        let result = target_to_bits(target);
+
+        let bits_str = "e93C0118";
+        let bits_vec: Vec<u8> = (0..bits_str.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&bits_str[i..i + 2], 16).unwrap())
+            .collect();
+        let bits_array: [u8; 4]  = bits_vec.try_into().unwrap();
+
+        for i in 0..4 {
+            assert_eq!(result[i], bits_array[i]);
+        }
+    }
+
+    #[test]
+    fn test_calculate_new_target() {
+        let prev_str = "54d80118";
+        let prev_v: Vec<u8> = (0..prev_str.len()) 
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&prev_str[i..i + 2], 16).unwrap())
+            .collect();
+        let prev_bits: [u8; 4] = prev_v.try_into().unwrap();
+
+        let time_differential = 302400u32;
+        let want = [0x00, 0x15, 0x76, 0x17];
+        
+        assert_eq!(
+            calculate_new_bits(prev_bits, time_differential),
+            want
+        )
     }
 
     #[test]
