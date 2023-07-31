@@ -6,3 +6,4 @@ pub mod script;
 pub mod test;
 pub mod ecc_with_extrnal_crate;
 pub mod block;
+pub mod network;
