@@ -3,7 +3,7 @@ use std::io::Read;
 use std::error::Error;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rand::{random, thread_rng, Rng};
+use rand::{thread_rng, Rng};
 
 use crate::models::helper::*;
 
@@ -68,6 +68,7 @@ impl NetworkEnvelope {
             return Err("Connection reset!".into())
         }   
 
+        #[allow(unused_assignments)]
         let mut expected_magic = [0u8; 4];
         if testnet {
             expected_magic = TESTNET_NETWORK_MAGIC;
@@ -144,7 +145,7 @@ mod test_networkenvelope {
     use std::io::Cursor;
 
     use super::*;
-    use crate::models::{network::NETWORK_MAGIC, helper::str_to_vec_u8};
+    use crate::models::helper::str_to_vec_u8;
 
     const MSG1: &str = "f9beb4d976657261636b000000000000000000005df6e0e2";
     const MSG2: &str = "f9beb4d976657273696f6e0000000000650000005f1a69d272\
@@ -239,6 +240,7 @@ impl VersionMessage {
         nonce: Option<[u8; 8]>, user_agent: Vec<u8>,
         latest_block: u32, relay: bool,
     ) -> Self {
+        #[allow(unused_assignments)]
         let mut new_timestamp = 0u64;
         match timestamp {
             Some(ts) => new_timestamp = ts,
@@ -248,10 +250,10 @@ impl VersionMessage {
                     .duration_since(UNIX_EPOCH)
                     .expect("Time went backwards");
 
-                let new_timestamp = since_the_epoch.as_secs();
+                new_timestamp = since_the_epoch.as_secs();
             }
         }
-
+        #[allow(unused_assignments)]
         let mut new_nonce = [0u8; 8];
         match nonce {
             Some(non) => new_nonce = non,

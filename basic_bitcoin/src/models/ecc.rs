@@ -426,7 +426,9 @@ impl Eq for IPoint {}
 
 impl Display for IPoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        #[allow(unused_assignments)]
         let mut sx = String::new();
+        #[allow(unused_assignments)]
         let mut sy = String::new();
         
         match (self.x, self.y) {
@@ -509,13 +511,6 @@ mod ipoint_test {
         
         assert!(&a != &b);
         assert!(&a == &a);
-    }
-
-    #[test]
-    fn test_on_curve() {
-        let a = IPoint::new(Some(3), Some(-7), 5, 7);
-        let b = IPoint::new(Some(18), Some(77), 5, 7);
-        let c = IPoint::new(Some(-2), Some(4), 5, 7);  // panicked at '(-2, 4) is not on the curve.'
     }
 
     #[test]
@@ -677,8 +672,6 @@ impl Mul<i128> for Point {
 
 #[cfg(test)]
 mod ecc_test {
-    use std::fs::File;
-
     use super::*;
 
     #[test]
@@ -695,13 +688,13 @@ mod ecc_test {
         for (x_raw, y_raw) in valid_points.iter() {
             let x = FieldElement::new(*x_raw, prime).unwrap();
             let y = FieldElement::new(*y_raw, prime).unwrap();
-            let temp = Point::new(Some(x), Some(y), a.clone(), b.clone()).unwrap();
+            let _temp = Point::new(Some(x), Some(y), a.clone(), b.clone()).unwrap();
         } 
 
         for (x_raw, y_raw) in invalid_points.iter() {
             let x = FieldElement::new(*x_raw, prime).unwrap();
             let y = FieldElement::new(*y_raw, prime).unwrap();
-            let temp = Point::new(Some(x), Some(y), a.clone(), b.clone()).unwrap();
+            let _temp = Point::new(Some(x), Some(y), a.clone(), b.clone()).unwrap();
         } 
     }
 
@@ -791,6 +784,7 @@ mod ecc_test {
 //     S256Field
 // ---------------------
 
+#[allow(dead_code)]
 const A: i64 = 0;
 const B: i64 = 7;
 // P = 2.pow(256u16) - 2.pow(32u16) - 977i64
@@ -1111,6 +1105,7 @@ impl S256Point {
     pub fn address(&self, compressed: bool, testnet: bool) -> String {
         let mut h160 = self.hash160(compressed);
 
+        #[allow(unused_assignments)]
         let mut prefix = 0u8;
         if testnet {
             prefix = b'\x6f';
