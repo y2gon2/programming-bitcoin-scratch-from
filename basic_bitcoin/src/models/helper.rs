@@ -260,9 +260,9 @@ pub fn u32_to_little_endian(input: u32, len: u8) -> Result<Vec<u8>, Box<dyn Erro
 ///                                     ->0xff6dc7ed3e60100000
 /// ```
 pub fn read_varint<R: Read>(reader: &mut R) -> Result<u64, std::io::Error> {
-    let buf = [0u8; 1];
+    let mut buf = [0u8; 1];
  
-    reader.read_to_end(&mut buf.to_vec())?;
+    reader.read_exact(&mut buf)?;
 
     let i = buf[0];
     match i {
