@@ -611,6 +611,14 @@ pub struct HeaderMessage {
     blocks: Vec<Block>,
 }
 
+impl HeaderMessage {
+    fn new() -> Self {
+        Self {
+            blocks: Vec::<Block>::new(),
+        }
+    }
+}
+
 impl Message for HeaderMessage {
     fn command(&self) -> Vec<u8> {
         vec![ b'h', b'e', b'a', b'd', b'e', b'r', b's']
@@ -776,32 +784,77 @@ impl SimpleNode {
     }
 }
 
-#[test]
-fn simple_node_test() {
-    let mut node = SimpleNode::new(
-        "testnet.programmingbitcoin.com",
-        None,
-        true,
-        true,
-    ).unwrap();
+#[cfg(test)]
+mod simple_node_test {
+    use crate::models::block::{GENESIS_BLOCK, GENESIS_BLOCK_STR, LOWEST_BITS_STR};
 
-    let version = VersionMessage::default();
+    use super::*;
+
+    #[test]
+    fn handshake_test() {
+        let mut node = SimpleNode::new(
+            "testnet.programmingbitcoin.com",
+            None,
+            true,
+            true,
+        ).unwrap();
     
-    let _ = node.send(Box::new(version));
+        let version = VersionMessage::default();
+        
+        let _ = node.send(Box::new(version));
+        
+        let mut verack_received = false;
+        let mut version_received = false;
     
-    let mut verack_received = false;
-    let mut version_received = false;
+        while !verack_received || !version_received {
+            let message = node.wait_for(
+                vec![Box::new(VersionMessage::default()), Box::new(VerAckMessage::new())]
+            );
+    
+            if message.command() == vec![b'v', b'e', b'r', b'a', b'c', b'k'] {
+                verack_received = true;
+            } else {
+                version_received = true;
+            }
+        }
+        node.handshake();
+    }
 
-    while !verack_received || !version_received {
-        let message = node.wait_for(
-            vec![Box::new(VersionMessage::default()), Box::new(VerAckMessage::new())]
-        );
+    // TO DO
+    #[test]
+    fn download_test() {
+        use std::io::{Cursor, Read};
 
-        if message.command() == vec![b'v', b'e', b'r', b'a', b'c', b'k'] {
-            verack_received = true;
-        } else {
-            version_received = true;
+        let genesis_vec = str_to_vec_u8(GENESIS_BLOCK_STR);
+        let mut genesis_cursor = Cursor::new(genesis_vec);
+        let mut previous = Block::parse(&mut genesis_cursor);
+
+        let first_epoch_timestamp = previous.get_timestamp();
+        let expected_bits = str_to_vec_u8(LOWEST_BITS_STR);
+        let mut count = 1;
+
+        let mut node = SimpleNode::new(
+            "mainnet.programmingbitcoin.com",
+            None,
+            false,
+            true,
+        ).unwrap();
+
+        node.handshake();
+
+        let previous_hash = previous.hash();
+
+        for _ in 0..19 {
+            let get_headers = GetHeaderMessage::default(
+                previous_hash.clone().try_into().unwrap()
+            );
+            node.send(Box::new(get_headers));
+
+            let headers = node.wait_for(
+                vec![Box::new(HeaderMessage::new())]
+            );
+
+            // for header in headers.
         }
     }
-    node.handshake();
 }
