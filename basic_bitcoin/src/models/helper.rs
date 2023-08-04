@@ -1,5 +1,6 @@
 //! collection of functions
 
+use std::hash;
 use std::io::Read;
 use std::error::Error;
 use std::iter::repeat;
@@ -451,3 +452,106 @@ mod hleper_test {
     }
 }
 
+//------------------------------------------------------------------------------
+//                                 for Merkle
+//------------------------------------------------------------------------------
+
+/// Takes the binary hashes (2 children) and calculates the hash256 (generate parent hash)
+pub fn merkle_parent(mut hash1: Vec<u8>, mut hash2: Vec<u8>) -> Vec<u8> {
+    hash1.append(&mut hash2);
+    return hash256(&hash1)
+}
+
+/// Merkle parent level 
+/// 모든 vec 내 child level hash 를 2씩 짝지어 merkle parent 를 구해놓은 상태
+/// 만약 홀수개의 hash 가 있었다면 하나를 복사하여 짝수로 만들어 계산
+pub fn merkle_parent_level(mut hashes: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
+    let length = hashes.len();
+
+    if length == 1 {
+        panic!("Cannot take a parent level with only 1 item");
+    } else if length % 2 == 1 {
+        hashes.push(hashes[length - 1].clone());
+    }
+
+    let mut parent_level = Vec::<Vec<u8>>::new();
+
+    for i in (0..hashes.len()).step_by(2) {
+        parent_level.push(merkle_parent(hashes[i].clone(), hashes[i + 1].clone()));
+    }
+
+    return parent_level
+}
+
+pub fn merkle_root(mut hashes: Vec<Vec<u8>>) -> Vec<u8> {
+    while hashes.len() > 1 {
+        hashes = merkle_parent_level(hashes);   
+    }
+
+    return hashes[0].clone()
+}
+
+// ------------------------------------- test ---------------------------------------
+#[cfg(test)]
+mod merkle_test {
+    use super::*;
+
+    #[test]
+    fn test_merkle_parent() {
+        let h0 = str_to_vec_u8("c117ea8ec828342f4dfb0ad6bd140e03a50720ece40169ee38bdc15d9eb64cf5");
+        let h1 = str_to_vec_u8("c131474164b412e3406696da1ee20ab0fc9bf41c8f05fa8ceea7a08d672d7cc5");
+        let want = str_to_vec_u8("8b30c5ba100f6f2e5ad1e2a742e5020491240f8eb514fe97c713c31718ad7ecd");
+
+        assert_eq!(merkle_parent(h0, h1), want);
+    }
+
+    #[test]
+    fn test_merkle_parent_level() {
+        let hex_hashes = vec![
+            str_to_vec_u8("c117ea8ec828342f4dfb0ad6bd140e03a50720ece40169ee38bdc15d9eb64cf5"),
+            str_to_vec_u8("c131474164b412e3406696da1ee20ab0fc9bf41c8f05fa8ceea7a08d672d7cc5"),
+            str_to_vec_u8("f391da6ecfeed1814efae39e7fcb3838ae0b02c02ae7d0a5848a66947c0727b0"),
+            str_to_vec_u8("3d238a92a94532b946c90e19c49351c763696cff3db400485b813aecb8a13181"),
+            str_to_vec_u8("10092f2633be5f3ce349bf9ddbde36caa3dd10dfa0ec8106bce23acbff637dae"),
+            str_to_vec_u8("7d37b3d54fa6a64869084bfd2e831309118b9e833610e6228adacdbd1b4ba161"),
+            str_to_vec_u8("8118a77e542892fe15ae3fc771a4abfd2f5d5d5997544c3487ac36b5c85170fc"),
+            str_to_vec_u8("dff6879848c2c9b62fe652720b8df5272093acfaa45a43cdb3696fe2466a3877"),
+            str_to_vec_u8("b825c0745f46ac58f7d3759e6dc535a1fec7820377f24d4c2c6ad2cc55c0cb59"),
+            str_to_vec_u8("95513952a04bd8992721e9b7e2937f1c04ba31e0469fbe615a78197f68f52b7c"),
+            str_to_vec_u8("2e6d722e5e4dbdf2447ddecc9f7dabb8e299bae921c99ad5b0184cd9eb8e5908"),
+        ];
+
+        let want_hex_hashes = vec![
+            str_to_vec_u8("8b30c5ba100f6f2e5ad1e2a742e5020491240f8eb514fe97c713c31718ad7ecd"),
+            str_to_vec_u8("7f4e6f9e224e20fda0ae4c44114237f97cd35aca38d83081c9bfd41feb907800"),
+            str_to_vec_u8("ade48f2bbb57318cc79f3a8678febaa827599c509dce5940602e54c7733332e7"),
+            str_to_vec_u8("68b3e2ab8182dfd646f13fdf01c335cf32476482d963f5cd94e934e6b3401069"),
+            str_to_vec_u8("43e7274e77fbe8e5a42a8fb58f7decdb04d521f319f332d88e6b06f8e6c09e27"),
+            str_to_vec_u8("1796cd3ca4fef00236e07b723d3ed88e1ac433acaaa21da64c4b33c946cf3d10"),
+        ];
+
+        assert_eq!(merkle_parent_level(hex_hashes), want_hex_hashes);
+    }
+
+    #[test]
+    fn test_merkle_root() {
+        let hashes = vec![
+            str_to_vec_u8("c117ea8ec828342f4dfb0ad6bd140e03a50720ece40169ee38bdc15d9eb64cf5"),
+            str_to_vec_u8("c131474164b412e3406696da1ee20ab0fc9bf41c8f05fa8ceea7a08d672d7cc5"),
+            str_to_vec_u8("f391da6ecfeed1814efae39e7fcb3838ae0b02c02ae7d0a5848a66947c0727b0"),
+            str_to_vec_u8("3d238a92a94532b946c90e19c49351c763696cff3db400485b813aecb8a13181"),
+            str_to_vec_u8("10092f2633be5f3ce349bf9ddbde36caa3dd10dfa0ec8106bce23acbff637dae"),
+            str_to_vec_u8("7d37b3d54fa6a64869084bfd2e831309118b9e833610e6228adacdbd1b4ba161"),
+            str_to_vec_u8("8118a77e542892fe15ae3fc771a4abfd2f5d5d5997544c3487ac36b5c85170fc"),
+            str_to_vec_u8("dff6879848c2c9b62fe652720b8df5272093acfaa45a43cdb3696fe2466a3877"),
+            str_to_vec_u8("b825c0745f46ac58f7d3759e6dc535a1fec7820377f24d4c2c6ad2cc55c0cb59"),
+            str_to_vec_u8("95513952a04bd8992721e9b7e2937f1c04ba31e0469fbe615a78197f68f52b7c"),
+            str_to_vec_u8("2e6d722e5e4dbdf2447ddecc9f7dabb8e299bae921c99ad5b0184cd9eb8e5908"),
+            str_to_vec_u8("b13a750047bc0bdceb2473e5fe488c2596d7a7124b4e716fdd29b046ef99bbf0"),
+        ];
+
+        let want = str_to_vec_u8("acbcab8bcc1af95d8d563b77d24c3d19b18f1486383d75a5085c4e86c86beed6");
+
+        assert_eq!(merkle_root(hashes), want);
+    }
+}
