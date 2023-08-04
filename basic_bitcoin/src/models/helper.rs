@@ -1,6 +1,5 @@
 //! collection of functions
 
-use std::hash;
 use std::io::Read;
 use std::error::Error;
 use std::iter::repeat;
