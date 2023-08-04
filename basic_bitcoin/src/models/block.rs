@@ -6,6 +6,15 @@ use lazy_static::lazy_static;
 
 use crate::models::helper::*;
 
+pub const GENESIS_BLOCK_STR: &str = "010000000000000000000000000000000000000000000000000000000\
+    0000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29a\
+    b5f49ffff001d1dac2b7c";
+pub const TESTNET_GENESIS_BLOCK_STR: &str = "0100000000000000000000000000000000000000000000000\
+    000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1\
+    e5e4adae5494dffff001d1aa4ae18";
+
+pub const LOWEST_BITS_STR: &str = "ffff001d";
+
 const INITAIL_COEF: u32 = 0xffff;
 const LOWEST_EXPONENT: u32 = 0x1d;
 
@@ -13,6 +22,10 @@ lazy_static!{
     // The formula : coefficient * 256**(exponent-3)
     pub static ref LOWEST: BigUint = BigUint::from(INITAIL_COEF) 
         * BigUint::from(256 as usize).pow(LOWEST_EXPONENT - 3);
+
+    pub static ref GENESIS_BLOCK: Vec<u8> = str_to_vec_u8(GENESIS_BLOCK_STR);
+
+    pub static ref TESTNET_GENESIS_BLOCK: Vec<u8> = str_to_vec_u8(TESTNET_GENESIS_BLOCK_STR);
 }
 
 pub struct Block {
@@ -171,6 +184,10 @@ impl Block {
         let proof = BigUint::from_bytes_le(&h256);
 
         return proof < self.target() 
+    }
+
+    pub fn get_timestamp(&self) -> u32 {
+        return self.timestamp
     }
 }
 
