@@ -12,7 +12,7 @@ use crate::models::network::Message;
 pub struct MerkleTree {
     total: usize,
     max_depth: usize,
-    nodes: Vec<Vec<Option<Vec<u8>>>>,
+    nodes: Vec<Vec<Option<[u8; 32]>>>,
 
     // merkle tree hash 를 연산할 때, 모든 node 에 대한 hashing 이 필요하지 않을 수 있다.
     // 이런 경우 필요한 부분만 hashing 을 처리하기 위해 현재 iterator 의 위치를 알아야 할 필요가 있다.
@@ -25,13 +25,13 @@ impl MerkleTree {
     pub fn new(total: usize) -> Self {
         let max_depth = (total as f32).log2().ceil() as usize;
 
-        let mut nodes = Vec::<Vec<Option<Vec<u8>>>>::new();
+        let mut nodes = Vec::<Vec<Option<[u8; 32]>>>::new();
         for depth in 0..max_depth + 1 {
             let mut num_items: usize = total / 2usize.pow(max_depth as u32 - depth as u32);
 
             if total % 2usize.pow(max_depth as u32 - depth as u32) > 0 { num_items += 1; }
 
-            let level_hashes: Vec<Option<Vec<u8>>> = vec![None; num_items];
+            let level_hashes: Vec<Option<[u8; 32]>> = vec![None; num_items];
             nodes.push(level_hashes);
         }
 
@@ -66,23 +66,23 @@ impl MerkleTree {
     }
 
     /// 최상단 root 값을 가저옴
-    pub fn root(&self) -> Option<Vec<u8>> {
+    pub fn root(&self) -> Option<[u8; 32]> {
         return self.nodes[0][0].clone()
     }
 
-    pub fn set_current_node(&mut self, value: Option<Vec<u8>>) {
+    pub fn set_current_node(&mut self, value: Option<[u8; 32]>) {
         self.nodes[self.current_depth][self.current_index] = value;
     }
 
-    pub fn get_current_node(&self) -> Option<Vec<u8>> {
+    pub fn get_current_node(&self) -> Option<[u8; 32]> {
         return self.nodes[self.current_depth][self.current_index].clone()
     }
 
-    pub fn get_left_node(&self) -> Option<Vec<u8>> {
+    pub fn get_left_node(&self) -> Option<[u8; 32]> {
         return self.nodes[self.current_depth + 1][self.current_index * 2].clone()
     }
 
-    pub fn get_right_node(&self) -> Option<Vec<u8>> {
+    pub fn get_right_node(&self) -> Option<[u8; 32]> {
         return self.nodes[self.current_depth + 1][self.current_index * 2 + 1].clone()
     }
 
@@ -95,10 +95,53 @@ impl MerkleTree {
     }
 
     /// Merkle tree 의 root hash 값을 계산 
-    pub fn popular_tree(&self, flag_bis: Vec<u8>, hashes: Vec<[u8; 32]>) {
+    pub fn popular_tree(&mut self, mut flag_bits: Vec<u8>, mut hashes: Vec<[u8; 32]>) {
         while self.root() == None {
             if self.is_leaf() {
+                flag_bits.remove(0);
 
+                self.set_current_node(Some(hashes.remove(0)));
+
+                self.up();
+            } else {
+                let left_hash = self.get_left_node();
+                let hash1 = left_hash.as_ref().unwrap();
+
+                if left_hash == None {
+                    if flag_bits.remove(0) == 0 {
+                        self.set_current_node(Some(hashes.remove(0)));
+                        
+                        self.up();
+                    } else {
+                        self.left();
+                    }
+                } else if self.right_exists() {
+                    let right_hash = self.get_right_node();
+                    let hash2 = right_hash.as_ref().unwrap();
+
+                    if right_hash == None {
+                        self.right();
+                    } else {
+                        let parent_vec = merkle_parent(hash1.clone().to_vec(), hash2.clone().to_vec());
+                        let parent: [u8; 32] = parent_vec.try_into().unwrap();
+
+                        self.set_current_node(Some(parent));
+                    }
+                } else {
+                    let parent_vec = merkle_parent(hash1.clone().to_vec(), hash1.clone().to_vec());
+                    let parent: [u8; 32] = parent_vec.try_into().unwrap();
+
+                    self.set_current_node(Some(parent));
+                    self.up();
+                }
+            }
+
+            if hashes.len() != 0 {
+                panic!("hashes not all consumed: {}", hashes.len());
+            }
+
+            if flag_bits.len() != 0 {
+                panic!("flag bits not all consumed");
             }
         }
     }
@@ -187,7 +230,9 @@ mod merkle_block {
         let mut tree = MerkleTree::new(HASHES.len());
 
         for (idx, h) in HASHES.iter().enumerate() {
-            tree.nodes[4][idx] = Some(str_to_vec_u8(*h));
+            let h_vec = str_to_vec_u8(*h);
+            let h_arr: [u8; 32] = h_vec.try_into().unwrap(); 
+            tree.nodes[4][idx] = Some(h_arr);
         }
 
         println!("{}", &tree);
@@ -203,9 +248,9 @@ mod merkle_block {
                 if left_hash == None { tree.left(); }
                 else if right_hash == None { tree.right(); }
                 else {
-                    tree.set_current_node(
-                        Some(merkle_parent(left_hash.unwrap(), right_hash.unwrap()))
-                    );
+                    let parent_vec = merkle_parent(left_hash.unwrap().to_vec(), right_hash.unwrap().to_vec());
+                    let parent = parent_vec.try_into().unwrap();
+                    tree.set_current_node(Some(parent));
                     tree.up();
                 }
             }
@@ -348,7 +393,7 @@ impl Message for MerkleBlock {
         let _ = reader.read_exact(&mut total_buf);
         let total = u32::from_le_bytes(total_buf);
 
-        let mut num_hashes = read_varint(reader).unwrap();
+        let num_hashes = read_varint(reader).unwrap();
         let mut hashes = Vec::<[u8; 32]>::new();
 
         for _ in 0..num_hashes {
