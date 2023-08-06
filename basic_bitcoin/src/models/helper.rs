@@ -314,6 +314,25 @@ pub fn encode_varint(input: u32) -> Result<Vec<u8>, Box<dyn Error>> {
 
 }
  
+pub fn bytes_to_bit_field(bytes: Vec<u8>) -> Vec<bool> {
+    let mut flag_bits = Vec::<bool>::new();
+
+    for mut byte in bytes {
+        for _ in 0..8 {
+            if byte & 1 == 1 {
+                flag_bits.push(true);
+            } else {
+                flag_bits.push(false);
+            }
+            byte >>= 1;
+        }
+    }
+
+    return flag_bits
+}
+
+
+ // ------------------------------------------- test ---------------------------------------------
 
 #[cfg(test)]
 mod hleper_test {
