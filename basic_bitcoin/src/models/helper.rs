@@ -3,6 +3,7 @@
 use std::io::Read;
 use std::error::Error;
 use std::iter::repeat;
+use elliptic_curve::rand_core::le;
 use sha2::{Sha256, Digest};
 use num::bigint::{BigUint, ToBigUint};
 use num::Integer;
@@ -314,23 +315,100 @@ pub fn encode_varint(input: u32) -> Result<Vec<u8>, Box<dyn Error>> {
 
 }
  
+pub fn bit_field_to_bytes(bits: Vec<bool>) -> Vec<u8> {
+    if bits.len() % 8 != 0 {
+        panic!("bit_field does not have a length that is divisible by 8");
+    }
+
+    let mut bytes = Vec::<u8>::new();
+    let mut b = 0u8;
+
+    for (idx, bit) in bits.iter().enumerate() {
+        let num_of_digit = (idx  % 8) as u8;
+        if bit {
+            b += 1.pow(num_of_digit);
+        }
+        
+        if idx != 0 && num_of_digit == 0 {
+            bytes.push(b);
+            b = 0u8;
+        }  
+    }
+
+    bytes
+}
+
 pub fn bytes_to_bit_field(bytes: Vec<u8>) -> Vec<bool> {
-    let mut flag_bits = Vec::<bool>::new();
+    let mut bits = Vec::<bool>::new();
 
     for mut byte in bytes {
         for _ in 0..8 {
             if byte & 1 == 1 {
-                flag_bits.push(true);
+                bits.push(true);
             } else {
-                flag_bits.push(false);
+                bits.push(false);
             }
             byte >>= 1;
         }
     }
 
-    return flag_bits
+    return bits
 }
 
+pub fn murmur3(data: Vec<u8>, seed: u32) -> u32 {
+    let c1: u32 = 0xcc9e2d51;
+    let c2: u32 = 0x1b873593;
+
+    let length = data.len();
+    let mut h1 = seed;
+
+    let roundedEnd = (length & 0xfffffffc); // round down to 4 byte block
+    for i in (0..roundedEnd).step_by(4) {
+        // Little-endian order
+        let mut k1: u32 = ((data[i] & 0xff) | ((data[i + 1] & 0xff) << 8) | 
+            ((data[i + 2] & 0xff) << 16) | (data[i + 3] << 24)) as u32 ;
+
+        k1 *= c1;
+        k1 = (k1 << 15) | ((k1 & 0xffffffff) >> 17); // ROTL32(k1,15)
+        k1 *= c2;
+        h1 ^= k1;
+        h1 = (h1 << 13) | ((h1 & 0xffffffff) >> 19); // ROTL32(h1,15)
+        h1 = h1 * 5 + 0xe6546b64;
+    }
+
+    // tail
+    let mut k1 = 0u32;
+    let val: u32 = (length & 0x03) as u32;
+
+    if val == 3 {
+        k1 = ((data[roundedEnd + 2] & 0xff) as u32) << 16;
+    }
+
+    // failthrough
+    if val == 2u32 || val == 3u32 {
+        k1 |= ((data[roundedEnd + 1] as u32) & 0xff) << 8;
+    }
+
+    if val == 1u32 || val == 2u32 || val == 3u32 {
+        k1 |= (data[roundedEnd] as u32) & 0xff;
+        k1 *= c1;
+        k1 = (k1 << 15) | ((k1 & 0xffffffff) >> 17); // ROTL32(k1,15)
+        k1 *= c2;
+        h1 ^= k1;
+    }
+
+    // finalization
+    h1 ^= length as u32;
+
+    // fmix(h1)
+    h1 ^= ((h1 & 0xffffffff) >> 16);
+    h1 *= 0x85ebca6b;
+    h1 ^= ((h1 & 0xffffffff) >> 13);
+    h1 *= 0xc2b2ae35;
+    h1 ^= ((h1 & 0xffffffff) >> 16);
+
+    return h1 & 0xffffffff
+}
 
  // ------------------------------------------- test ---------------------------------------------
 
